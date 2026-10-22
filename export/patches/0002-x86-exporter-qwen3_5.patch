@@ -1,0 +1,498 @@
+diff --git a/tensorrt_edgellm/models/ops.py b/tensorrt_edgellm/models/ops.py
+index 466b557..d7be3f5 100644
+--- a/tensorrt_edgellm/models/ops.py
++++ b/tensorrt_edgellm/models/ops.py
+@@ -242,6 +242,94 @@ def _(query_states, key_states, value_states, cu_seqlens, max_seqlen_carrier,
+     return torch.empty_like(query_states)
+ 
+ 
++# ---------------------------------------------------------------------------
++# Custom op: trt_edgellm::vit_swiglu_plugin  (ViT SwiGLU TensorCore MLP)
++# ---------------------------------------------------------------------------
++# Fuses gate_proj + up_proj GEMMs into one TensorCore GEMM, then applies
++# SwiGLU activation and down_proj in a single plugin call.
++#
++# Weight layout (row-major):
++#   fused_weight: [hiddenDim, 2*intermediateDim]  — gate_proj || up_proj
++#   fused_bias:   [2*intermediateDim]              — gate_bias || up_bias  (optional)
++#   down_weight:  [hiddenDim, intermediateDim]     — down_proj weight
++#   down_bias:    [hiddenDim]                      — down_proj bias (optional)
++#
++# The C++ plugin expects weights in row-major format (PyTorch default).
++
++
++@torch.library.custom_op("trt_edgellm::vit_swiglu_plugin", mutates_args=())
++def vit_swiglu_plugin(
++    hidden_states: torch.Tensor,   # [numTokens, hiddenDim] FP16
++    fused_weight: torch.Tensor,    # [hiddenDim, 2*intermediateDim] FP16 row-major
++    fused_bias: Optional[torch.Tensor],  # [2*intermediateDim] FP16 optional
++    down_weight: torch.Tensor,     # [hiddenDim, intermediateDim] FP16 row-major
++    down_bias: Optional[torch.Tensor],  # [hiddenDim] FP16 optional
++    hidden_dim: int,
++    intermediate_dim: int,
++) -> torch.Tensor:  # [numTokens, hiddenDim] FP16
++    """Fused SwiGLU MLP via TensorCore plugin.
++
++    In eager mode, implements the full MLP as a fallback (for testing/debugging).
++    During dynamo/ONNX tracing, the register_fake shape propagation is used.
++    """
++    # Eager mode fallback: standard SiLU(gate(x)) * up(x) @ down_weight^T
++    # fused_weight is [H, 2*I]. For gate/up: F.linear expects [out_features, in_features].
++    # fused_weight[:, :I].T is [I, H] = [out_features, in_features] for gate_proj.
++    gate = torch.nn.functional.linear(
++        hidden_states, fused_weight[:, :intermediate_dim].T,
++        fused_bias[:intermediate_dim] if fused_bias is not None else None)
++    up = torch.nn.functional.linear(
++        hidden_states, fused_weight[:, intermediate_dim:].T,
++        fused_bias[intermediate_dim:] if fused_bias is not None else None)
++    hidden = torch.nn.functional.silu(gate) * up
++    # down_weight is [H, I] = [out_features, in_features] for down_proj.
++    return torch.nn.functional.linear(
++        hidden, down_weight,
++        down_bias if down_bias is not None else None)
++
++
++@vit_swiglu_plugin.register_fake
++def _(hidden_states, fused_weight, fused_bias, down_weight, down_bias,
++      hidden_dim, intermediate_dim):
++    return torch.empty_like(hidden_states)
++
++
++# ---------------------------------------------------------------------------
++# Custom op: trt_edgellm::vit_gelu_ffn_plugin  (ViT GELU FFN TensorCore MLP)
++# ---------------------------------------------------------------------------
++# Fuses fc1 + GELU + fc2 into a single TensorCore-optimized plugin call.
++# For Qwen3-VL visual encoder (GELU FFN, not SwiGLU).
++#
++# Weight layout (row-major):
++#   fc1_weight: [H, I]          — fc1 weight (hidden → intermediate)
++#   fc1_bias:   [I]             — fc1 bias (optional)
++#   fc2_weight: [I, H]          — fc2 weight (intermediate → hidden)
++#   fc2_bias:   [H]             — fc2 bias (optional)
++
++
++@torch.library.custom_op("trt_edgellm::vit_gelu_ffn_plugin", mutates_args=())
++def vit_gelu_ffn_plugin(
++    hidden_states: torch.Tensor,   # [N, H] FP16
++    fc1_weight: torch.Tensor,      # [H, I] FP16 row-major
++    fc1_bias: Optional[torch.Tensor],  # [I] FP16 optional
++    fc2_weight: torch.Tensor,      # [I, H] FP16 row-major
++    fc2_bias: Optional[torch.Tensor],  # [H] FP16 optional
++    hidden_dim: int,               # H
++    intermediate_dim: int,         # I
++) -> torch.Tensor:  # [N, H] FP16
++    """Fused GELU FFN MLP via TensorCore plugin."""
++    # Eager mode fallback: GELU(fc1(x)) @ fc2^T
++    hidden = torch.nn.functional.linear(hidden_states, fc1_weight.T, fc1_bias)
++    hidden = torch.nn.functional.gelu(hidden, approximate="tanh")
++    return torch.nn.functional.linear(hidden, fc2_weight.T, fc2_bias)
++
++
++@vit_gelu_ffn_plugin.register_fake
++def _(hidden_states, fc1_weight, fc1_bias, fc2_weight, fc2_bias, hidden_dim,
++      intermediate_dim):
++    return torch.empty_like(hidden_states)
++
++
+ # ---------------------------------------------------------------------------
+ # Custom op: trt::trt_ragged_attention  (TRT-native ViT ragged self-attention)
+ # ---------------------------------------------------------------------------
+@@ -1151,6 +1239,27 @@ def _(q,
+     return torch.empty_like(v), h0_source.clone(), intermediate_recurrent_state
+ 
+ 
++# ---------------------------------------------------------------------------
++# Custom op: trt_edgellm::gated_rmsnorm  (fused GDN output norm + silu gate)
++# ---------------------------------------------------------------------------
++
++
++@torch.library.custom_op("trt_edgellm::gated_rmsnorm", mutates_args=())
++def gated_rmsnorm(
++    o: torch.Tensor,  # [batch, seq, num_v_heads, v_dim] float16 — GDN plugin output
++    z: torch.Tensor,  # [batch, seq, num_v_heads, v_dim] float16 — per-head gate
++    weight: torch.Tensor,  # [v_dim] float16 — RMSNorm weight
++    eps: float,
++) -> torch.Tensor:
++    """Stub: fused RMSNorm(o) * silu(z) * weight (FP16 I/O, fp32 math)."""
++    return torch.empty_like(o)
++
++
++@gated_rmsnorm.register_fake
++def _(o, z, weight, eps):
++    return torch.empty_like(o)
++
++
+ # ---------------------------------------------------------------------------
+ # Custom op: trt_edgellm::Nvfp4MoePlugin
+ # ---------------------------------------------------------------------------
+diff --git a/tensorrt_edgellm/models/qwen3_5/modeling_qwen3_5_text.py b/tensorrt_edgellm/models/qwen3_5/modeling_qwen3_5_text.py
+index 058402c..dccb971 100644
+--- a/tensorrt_edgellm/models/qwen3_5/modeling_qwen3_5_text.py
++++ b/tensorrt_edgellm/models/qwen3_5/modeling_qwen3_5_text.py
+@@ -63,7 +63,7 @@ from ..linear import (FP16Linear, NVFP4LinearMethod, ReplicatedLinear,
+                       is_nvfp4_linear, make_linear)
+ from ..ops import (attention_plugin, causal_conv1d,
+                    causal_conv1d_with_intermediate, gated_delta_net,
+-                   gated_delta_net_with_intermediate)
++                   gated_delta_net_with_intermediate, gated_rmsnorm)
+ 
+ __all__ = ["Qwen3_5CausalLM"]
+ 
+@@ -293,12 +293,13 @@ class GdnMixer(nn.Module):
+                 recurrent_state, context_lengths, self.k_dim, self.v_dim)
+             intermediate_recurrent_state_out = None
+ 
+-        # 5. Gated norm: norm FIRST, then gate
++        # 5. Gated norm: norm FIRST, then gate, fused in one plugin node.
+         # HF Qwen3_5RMSNormGated: weight * RMSNorm(x) * silu(gate)
+-        core_attn_out = core_attn_out.reshape(-1, self.v_dim)
+-        z = z.reshape(-1, self.v_dim)
+-        core_attn_out = self.norm(core_attn_out)
+-        core_attn_out = core_attn_out * F.silu(z)
++        # o is [b, s, hv, v]; z is [b, s, hv*v] -> reshape to per-head
++        # [b, s, hv, v] (same rows the kernel sees after flattening).
++        z = z.reshape(batch_size, seq_len, self.num_v_heads, self.v_dim)
++        core_attn_out = gated_rmsnorm(core_attn_out, z, self.norm.weight,
++                                      self.norm.variance_epsilon)
+         core_attn_out = core_attn_out.reshape(batch_size, seq_len, -1)
+ 
+         # 6. Output projection
+diff --git a/tensorrt_edgellm/models/qwen3_vl/modeling_qwen3_vl_visual.py b/tensorrt_edgellm/models/qwen3_vl/modeling_qwen3_vl_visual.py
+index fc29934..1985240 100644
+--- a/tensorrt_edgellm/models/qwen3_vl/modeling_qwen3_vl_visual.py
++++ b/tensorrt_edgellm/models/qwen3_vl/modeling_qwen3_vl_visual.py
+@@ -37,7 +37,7 @@ import torch.nn.functional as F
+ from ... import config as config_module
+ from ..linear import make_linear
+ from ..ops import (is_trt_native_attention_enabled, trt_ragged_attention,
+-                   vit_attention_plugin)
++                   vit_attention_plugin, vit_gelu_ffn_plugin)
+ 
+ if TYPE_CHECKING:
+     from ...config import ModelConfig
+@@ -178,7 +178,11 @@ class Qwen3VLMLP(nn.Module):
+             module_name=f"{name_prefix}.linear_fc2" if name_prefix else "")
+ 
+     def forward(self, x: torch.Tensor) -> torch.Tensor:
+-        return self.linear_fc2(F.gelu(self.linear_fc1(x), approximate="tanh"))
++        # 使用原生 PyTorch MLP（GELU FFN plugin 在 Orin AGX 上比原生实现慢 3.2x）
++        x = self.linear_fc1(x)
++        x = F.gelu(x, approximate="tanh")
++        x = self.linear_fc2(x)
++        return x
+ 
+ 
+ class Qwen3VLVisionAttention(nn.Module):
+diff --git a/tensorrt_edgellm/onnx/dynamo_translations.py b/tensorrt_edgellm/onnx/dynamo_translations.py
+index 5d8962c..5aac75f 100644
+--- a/tensorrt_edgellm/onnx/dynamo_translations.py
++++ b/tensorrt_edgellm/onnx/dynamo_translations.py
+@@ -605,6 +605,16 @@ def _gated_delta_net_intermediate_dispatch(
+         spec_verify_phase_marker, k_dim, v_dim)
+ 
+ 
++@script()
++def _gated_rmsnorm_translation(
++    o: onnxscript.FLOAT16,
++    z: onnxscript.FLOAT16,
++    weight: onnxscript.FLOAT16,
++    eps: float,
++) -> onnxscript.FLOAT16:
++    return _trt_edgellm.gated_rmsnorm(o, z, weight, eps=eps)
++
++
+ @script()
+ def _update_ssm_state_translation(
+     hidden_states: onnxscript.FLOAT16,
+@@ -690,6 +700,60 @@ def _vit_attention_plugin_translation(
+     )
+ 
+ 
++# ---------------------------------------------------------------------------
++# ViT SwiGLU TensorCore plugin
++# ---------------------------------------------------------------------------
++
++
++@script()
++def _vit_swiglu_plugin_translation(
++    hidden_states: onnxscript.FLOAT16,
++    fused_weight: onnxscript.FLOAT16,
++    fused_bias: onnxscript.FLOAT16,
++    down_weight: onnxscript.FLOAT16,
++    down_bias: onnxscript.FLOAT16,
++    hidden_dim: int,
++    intermediate_dim: int,
++) -> onnxscript.FLOAT16:
++    """Fused ViT SwiGLU MLP via TensorCore plugin."""
++    return _trt_edgellm.ViTSwiGLUPlugin(
++        hidden_states,
++        fused_weight,
++        fused_bias,
++        down_weight,
++        down_bias,
++        hidden_dim=hidden_dim,
++        intermediate_dim=intermediate_dim,
++    )
++
++
++# ---------------------------------------------------------------------------
++# ViT GELU FFN TensorCore plugin
++# ---------------------------------------------------------------------------
++
++
++@script()
++def _vit_gelu_ffn_plugin_translation(
++    hidden_states: onnxscript.FLOAT16,
++    fc1_weight: onnxscript.FLOAT16,
++    fc1_bias: onnxscript.FLOAT16,
++    fc2_weight: onnxscript.FLOAT16,
++    fc2_bias: onnxscript.FLOAT16,
++    hidden_dim: int,
++    intermediate_dim: int,
++) -> onnxscript.FLOAT16:
++    """Fused ViT GELU FFN MLP via TensorCore plugin."""
++    return _trt_edgellm.ViTGELUFFNPlugin(
++        hidden_states,
++        fc1_weight,
++        fc1_bias,
++        fc2_weight,
++        fc2_bias,
++        hidden_dim=hidden_dim,
++        intermediate_dim=intermediate_dim,
++    )
++
++
+ # ---------------------------------------------------------------------------
+ # TRT-native ViT attention (TRT >= 11, packed NHD with Q scaling)
+ # ---------------------------------------------------------------------------
+@@ -1091,8 +1155,14 @@ def build_custom_translation_table() -> dict:
+         _gated_delta_net_dispatch,
+         torch.ops.trt_edgellm.gated_delta_net_with_intermediate.default:
+         _gated_delta_net_intermediate_dispatch,
++        torch.ops.trt_edgellm.gated_rmsnorm.default:
++        _gated_rmsnorm_translation,
+         torch.ops.trt.vit_attention_plugin.default:
+         _vit_attention_plugin_translation,
++        torch.ops.trt_edgellm.vit_swiglu_plugin.default:
++        _vit_swiglu_plugin_translation,
++        torch.ops.trt_edgellm.vit_gelu_ffn_plugin.default:
++        _vit_gelu_ffn_plugin_translation,
+         torch.ops.trt.trt_ragged_attention.default:
+         _trt_ragged_attention_translation,
+         torch.ops.trt.gather_nd.default:
+diff --git a/tensorrt_edgellm/onnx/export_encoder.py b/tensorrt_edgellm/onnx/export_encoder.py
+index c1c23c2..da643f7 100644
+--- a/tensorrt_edgellm/onnx/export_encoder.py
++++ b/tensorrt_edgellm/onnx/export_encoder.py
+@@ -217,9 +217,16 @@ def _run_dynamo_export(
+     model.eval()
+     translation_table = build_custom_translation_table()
+ 
+-    assert len(dynamo_inputs) == len(onnx_input_names) and \
+-        len(dynamo_inputs) == len(dynamic_shapes), \
+-        f"dynamo_inputs: {len(dynamo_inputs)}, onnx_input_names: {len(onnx_input_names)}, dynamic_shapes: {len(dynamic_shapes)}"
++    # 对含 *args（如 AlpamayoAction 的 *cache_tensors）的模型，
++    # dynamo_inputs 是展平的（78 个），而 dynamic_shapes 是紧凑的（7 个），
++    # 因为 torch.export 将 *args 视为单个 VarPositional 参数。
++    # 此时跳过长度匹配检查。
++    if len(dynamo_inputs) != len(dynamic_shapes):
++        logger.info(
++            "dynamo_inputs (%d) != dynamic_shapes (%d); "
++            "model likely uses *args (e.g. AlpamayoAction *cache_tensors). "
++            "Proceeding with torch.onnx.export.",
++            len(dynamo_inputs), len(dynamic_shapes))
+ 
+     if isinstance(dynamo_inputs, dict):
+         args = ()
+diff --git a/tensorrt_edgellm/onnx/onnx_custom_schemas.py b/tensorrt_edgellm/onnx/onnx_custom_schemas.py
+index f804e38..8c077ae 100644
+--- a/tensorrt_edgellm/onnx/onnx_custom_schemas.py
++++ b/tensorrt_edgellm/onnx/onnx_custom_schemas.py
+@@ -257,6 +257,125 @@ _vit_attention_plugin_schema = OpSchema(
+     ],
+ )
+ 
++# ---------------------------------------------------------------------------
++# ViT SwiGLU TensorCore plugin (trt_edgellm domain)
++# ---------------------------------------------------------------------------
++
++_vit_swiglu_plugin_schema = OpSchema(
++    name="ViTSwiGLUPlugin",
++    domain="trt_edgellm",
++    since_version=_SCHEMA_SINCE_VERSION,
++    doc=
++    "Fused ViT SwiGLU MLP via TensorCore (gate+up fused GEMM + SwiGLU + down_proj).",
++    inputs=[
++        OpSchema.FormalParameter(
++            name="hidden_states",
++            description="Input tensor [N, H] (FP16)",
++            type_str="tensor(float16)",
++        ),
++        OpSchema.FormalParameter(
++            name="fused_weight",
++            description="Fused gate+up weight [H, 2*I] (FP16 row-major)",
++            type_str="tensor(float16)",
++        ),
++        OpSchema.FormalParameter(
++            name="fused_bias",
++            description="Fused gate+up bias [2*I] (FP16, optional)",
++            type_str="tensor(float16)",
++        ),
++        OpSchema.FormalParameter(
++            name="down_weight",
++            description="Down projection weight [H, I] (FP16 row-major)",
++            type_str="tensor(float16)",
++        ),
++        OpSchema.FormalParameter(
++            name="down_bias",
++            description="Down projection bias [H] (FP16, optional)",
++            type_str="tensor(float16)",
++        ),
++    ],
++    outputs=[
++        OpSchema.FormalParameter(
++            name="output",
++            description="MLP output [N, H] (FP16)",
++            type_str="tensor(float16)",
++        ),
++    ],
++    attributes=[
++        OpSchema.Attribute(
++            name="hidden_dim",
++            type=OpSchema.AttrType.INT,
++            description="Hidden dimension H",
++            required=True,
++        ),
++        OpSchema.Attribute(
++            name="intermediate_dim",
++            type=OpSchema.AttrType.INT,
++            description="Intermediate dimension I",
++            required=True,
++        ),
++    ],
++)
++
++# ---------------------------------------------------------------------------
++# ViT GELU FFN TensorCore plugin (trt_edgellm domain)
++# ---------------------------------------------------------------------------
++
++_vit_gelu_ffn_plugin_schema = OpSchema(
++    name="ViTGELUFFNPlugin",
++    domain="trt_edgellm",
++    since_version=_SCHEMA_SINCE_VERSION,
++    doc="Fused ViT GELU FFN MLP via TensorCore (fc1 + GELU + fc2).",
++    inputs=[
++        OpSchema.FormalParameter(
++            name="hidden_states",
++            description="Input tensor [N, H] (FP16)",
++            type_str="tensor(float16)",
++        ),
++        OpSchema.FormalParameter(
++            name="fc1_weight",
++            description="FC1 weight [H, I] (FP16 row-major)",
++            type_str="tensor(float16)",
++        ),
++        OpSchema.FormalParameter(
++            name="fc1_bias",
++            description="FC1 bias [I] (FP16, optional)",
++            type_str="tensor(float16)",
++        ),
++        OpSchema.FormalParameter(
++            name="fc2_weight",
++            description="FC2 weight [I, H] (FP16 row-major)",
++            type_str="tensor(float16)",
++        ),
++        OpSchema.FormalParameter(
++            name="fc2_bias",
++            description="FC2 bias [H] (FP16, optional)",
++            type_str="tensor(float16)",
++        ),
++    ],
++    outputs=[
++        OpSchema.FormalParameter(
++            name="output",
++            description="MLP output [N, H] (FP16)",
++            type_str="tensor(float16)",
++        ),
++    ],
++    attributes=[
++        OpSchema.Attribute(
++            name="hidden_dim",
++            type=OpSchema.AttrType.INT,
++            description="Hidden dimension H",
++            required=True,
++        ),
++        OpSchema.Attribute(
++            name="intermediate_dim",
++            type=OpSchema.AttrType.INT,
++            description="Intermediate dimension I",
++            required=True,
++        ),
++    ],
++)
++
+ # ---------------------------------------------------------------------------
+ # NVFP4 (trt domain)
+ # ---------------------------------------------------------------------------
+@@ -1035,6 +1154,44 @@ _gated_delta_net_schema = OpSchema(
+     ],
+ )
+ 
++# ---------------------------------------------------------------------------
++# trt_edgellm::gated_rmsnorm  (fused GDN output norm + silu gate)
++# ---------------------------------------------------------------------------
++
++_gated_rmsnorm_schema = OpSchema(
++    name="gated_rmsnorm",
++    domain="trt_edgellm",
++    since_version=_SCHEMA_SINCE_VERSION,
++    doc=("Fused RMSNorm + silu gate for the Qwen3.5 GDN output. "
++         "y = weight * RMSNorm(o) * silu(z) with fp32 math and FP16 I/O; "
++         "replaces the RMSNorm/silu/mul elementwise chain in the engine graph."),
++    inputs=[
++        OpSchema.FormalParameter(name="o",
++                                 description="GDN output [n, seq, hv, v]",
++                                 type_str="T"),
++        OpSchema.FormalParameter(name="z",
++                                 description="Per-head gate [n, seq, hv, v]",
++                                 type_str="T"),
++        OpSchema.FormalParameter(name="weight",
++                                 description="RMSNorm weight [v]",
++                                 type_str="T"),
++    ],
++    outputs=[
++        OpSchema.FormalParameter(name="y",
++                                 description="Normed+gated output [n, seq, hv, v]",
++                                 type_str="T"),
++    ],
++    type_constraints=[
++        ("T", ["tensor(float16)"], ""),
++    ],
++    attributes=[
++        OpSchema.Attribute(name="eps",
++                           type=OpSchema.AttrType.FLOAT,
++                           description="RMSNorm epsilon",
++                           required=True),
++    ],
++)
++
+ # ---------------------------------------------------------------------------
+ # trt_edgellm::Int4MoePlugin
+ # ---------------------------------------------------------------------------
+@@ -1473,6 +1630,8 @@ _gemma4_audio_attention_plugin_schema = OpSchema(
+ _ALL_CUSTOM_SCHEMAS: tuple[OpSchema, ...] = (
+     _attention_plugin_schema,
+     _vit_attention_plugin_schema,
++    _vit_swiglu_plugin_schema,
++    _vit_gelu_ffn_plugin_schema,
+     _trt_fp4_dynamic_quantize_schema,
+     _trt_dequantize_linear_schema,
+     _trt_mxfp8_dynamic_quantize_schema,
+@@ -1485,6 +1644,7 @@ _ALL_CUSTOM_SCHEMAS: tuple[OpSchema, ...] = (
+     _attention_trt_native_schema,
+     _trt_ragged_attention_schema,
+     _gated_delta_net_schema,
++    _gated_rmsnorm_schema,
+     _int4_moe_plugin_schema,
+     _nvfp4_moe_plugin_schema,
+     _nvfp4_moe_plugin_geforce_schema,

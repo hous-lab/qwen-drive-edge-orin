@@ -1,0 +1,33 @@
+--- a/cpp/kernels/gdnKernels/cuteDslGDNRunner.cpp	2026-10-04 17:23:46.080029958 +0800
++++ b/cpp/kernels/gdnKernels/cuteDslGDNRunner.cpp	2026-10-04 17:23:46.164030137 +0800
+@@ -18,11 +18,13 @@
+ #ifdef CUTE_DSL_GDN_ENABLED
+ 
+ #include "cuteDslGDNRunner.h"
++#include "gdnChunkPrefillSm87.h"
+ #include "gdnKernelUtils.cuh"
+ 
+ #include "common/logger.h"
+ 
+ #include <cmath>
++#include <cstdlib>
+ #include <cstring>
+ #include <mutex>
+ 
+@@ -156,6 +158,16 @@
+         return runPrefillBlackwell(params, stream);
+     }
+ #endif
++    // E3 (Qwen-Drive text engine): the official CuTe prefill kernel produces
++    // all-zero output on sm_87, so route prefill to the self-developed chunked
++    // delta-rule kernel (bf16 wmma, fp16<->bf16 adapters).  Set
++    // QD_GDN_OFFICIAL=1 to restore the official path (baseline reproduction /
++    // A-B comparison) on the same binary.
++    static bool const sUseOfficialGdnPrefill = (std::getenv("QD_GDN_OFFICIAL") != nullptr);
++    if (!sUseOfficialGdnPrefill)
++    {
++        return runGdnChunkPrefillSm87(params, stream);
++    }
+     return runPrefill(params, stream);
+ }
+ 

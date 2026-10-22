@@ -1,0 +1,133 @@
+// K3b-TC: o-pass, all-bf16 wmma (EXPERIMENT variant of deltanet_tcop_o_kernel).
+// Staging casts fp32 workspace operands (Sc/w/u/M) to bf16 in smem; dots on
+// bf16 tensor cores (fp32 acc): v_new = u@S, term1 = q*e.g @ S, term2 = M@v_new.
+// smem ~61KB -> same co-residency as canonical (2/SM x86, 3/SM Orin).
+template <int DK, int DV, int CS, int BV>
+__global__ void __launch_bounds__(NTHREADS)
+deltanet_tcop_o_wmma_kernel(const __nv_bfloat16* __restrict__ qp,
+                  const float* __restrict__ wp, const float* __restrict__ up,
+                  const float* __restrict__ egp, const float* __restrict__ scp,
+                  const float* __restrict__ mp,
+                  __nv_bfloat16* __restrict__ op,
+                  int T, int NC, int HV, int HQK, float scale) {
+    const int h = blockIdx.y;
+    const int z = blockIdx.z;
+    const int b = z / NC;
+    const int c = z - b * NC;
+    const int tid = threadIdx.x;
+    const int warp = tid / 32;
+    const int j0 = blockIdx.x * BV;
+    const long qkh = h / (HV / HQK);
+    const long bhnc = ((long)b * HV + h) * NC + c;
+    extern __shared__ char smem_raw[];
+    __nv_bfloat16* Ssb = reinterpret_cast<__nv_bfloat16*>(smem_raw);          // DK*BV
+    __nv_bfloat16* Wb = Ssb + DK * BV;                                        // CS*BV
+    float* Vnf = reinterpret_cast<float*>(Wb + CS * BV);                      // CS*BV
+    __nv_bfloat16* Vnb = reinterpret_cast<__nv_bfloat16*>(Vnf + CS * BV);     // CS*BV
+    __nv_bfloat16* ub = Vnb + CS * BV;                                        // CS*DK
+    __nv_bfloat16* qs = ub + CS * DK;                                         // CS*(DK+pad)
+    __nv_bfloat16* Mb = qs + CS * (DK + KSTRIDE_PAD);                         // CS*CS
+    float* os1 = reinterpret_cast<float*>(Mb + CS * CS);                      // CS*BV
+    float* os2 = os1 + CS * BV;                                               // CS*BV
+    float* eg_s = os2 + CS * BV;                                              // CS
+    for (int e = tid; e < DK * (BV / 2); e += NTHREADS) {
+        const int d = e / (BV / 2);
+        const int cv2 = (e - d * (BV / 2)) * 2;
+        const float2 s2 = reinterpret_cast<const float2*>(scp + bhnc * DK * DV + d * DV + j0)[cv2 / 2];
+        __nv_bfloat16* row = Ssb + d * BV;
+        row[cv2] = __float2bfloat16(s2.x);
+        row[cv2 + 1] = __float2bfloat16(s2.y);
+    }
+    for (int e = tid; e < CS * BV; e += NTHREADS) {
+        const int i = e / BV;
+        const int j = e - i * BV;
+        Wb[e] = __float2bfloat16(wp[bhnc * CS * DV + i * DV + j0 + j]);
+        eg_s[i] = egp[bhnc * CS + i] * scale;
+    }
+    for (int e = tid; e < CS * DK; e += NTHREADS) {
+        const int i = e / DK;
+        const int d = e - i * DK;
+        ub[i * DK + d] = __float2bfloat16(up[bhnc * CS * DK + i * DK + d]);
+    }
+    const int kpack = DK / 8;
+    for (int e = tid; e < CS * kpack; e += NTHREADS) {
+        const int i = e / kpack;
+        const int d8 = e - i * kpack;
+        const long tofs = (long)c * CS + i;
+        const bool ok = tofs < T;
+        union { uint4 u; __nv_bfloat16 h[8]; } pq;
+        pq.u = ok ? reinterpret_cast<const uint4*>(
+                        qp + (((long)b * T + tofs) * HQK + qkh) * DK)[d8]
+                  : make_uint4(0u, 0u, 0u, 0u);
+        const float qeg = egp[bhnc * CS + i] * scale;
+        __nv_bfloat16* qr = qs + i * (DK + KSTRIDE_PAD);
+        for (int l = 0; l < 8; ++l) qr[d8 * 8 + l] = __float2bfloat16(__bfloat162float(pq.h[l]) * qeg);
+    }
+    for (int e = tid; e < (CS * CS) / 4; e += NTHREADS) {
+        const int i = e / (CS / 4);
+        const int j4 = (e - i * (CS / 4)) * 4;
+        float4 m4 = reinterpret_cast<const float4*>(mp + bhnc * CS * CS + i * CS + j4)[0];
+        __nv_bfloat16* row = Mb + i * CS + j4;
+        row[0] = __float2bfloat16(m4.x);
+        row[1] = __float2bfloat16(m4.y);
+        row[2] = __float2bfloat16(m4.z);
+        row[3] = __float2bfloat16(m4.w);
+    }
+    __syncthreads();
+    if (!null_op) {
+        // dot1: Vnf = ub @ Ssb (4 m-tiles, warps 0-3)
+        if (warp < 4) {
+            const int m0 = warp * 16;
+            wmma::fragment<wmma::accumulator, 16, 16, 16, float> a1;
+            wmma::fill_fragment(a1, 0.f);
+            for (int k0 = 0; k0 < DK; k0 += 16) {
+                wmma::fragment<wmma::matrix_a, 16, 16, 16, __nv_bfloat16, wmma::row_major> fa;
+                wmma::fragment<wmma::matrix_b, 16, 16, 16, __nv_bfloat16, wmma::row_major> fb;
+                wmma::load_matrix_sync(fa, ub + m0 * DK + k0, DK);
+                wmma::load_matrix_sync(fb, Ssb + k0 * BV, BV);
+                wmma::mma_sync(a1, fa, fb, a1);
+            }
+            wmma::store_matrix_sync(Vnf + m0 * BV, a1, BV, wmma::mem_row_major);
+        }
+    }
+    __syncthreads();
+    for (int e = tid; e < CS * BV; e += NTHREADS) {
+        const int i = e / BV;
+        const int j = e - i * BV;
+        Vnb[e] = __float2bfloat16(__bfloat162float(Wb[e]) - Vnf[e]);
+    }
+    if (!null_op) {
+        // term1: os1 = qs @ Ssb ; term2: os2 = Mb @ Vnb (warps 0-3)
+        if (warp < 4) {
+            const int m0 = warp * 16;
+            wmma::fragment<wmma::accumulator, 16, 16, 16, float> a2, a3;
+            wmma::fill_fragment(a2, 0.f);
+            wmma::fill_fragment(a3, 0.f);
+            for (int k0 = 0; k0 < DK; k0 += 16) {
+                wmma::fragment<wmma::matrix_a, 16, 16, 16, __nv_bfloat16, wmma::row_major> fq;
+                wmma::fragment<wmma::matrix_b, 16, 16, 16, __nv_bfloat16, wmma::row_major> fs;
+                wmma::load_matrix_sync(fq, qs + m0 * (DK + KSTRIDE_PAD) + k0, DK + KSTRIDE_PAD);
+                wmma::load_matrix_sync(fs, Ssb + k0 * BV, BV);
+                wmma::mma_sync(a2, fq, fs, a2);
+            }
+            for (int k0 = 0; k0 < CS; k0 += 16) {
+                wmma::fragment<wmma::matrix_a, 16, 16, 16, __nv_bfloat16, wmma::row_major> fm;
+                wmma::fragment<wmma::matrix_b, 16, 16, 16, __nv_bfloat16, wmma::row_major> fv;
+                wmma::load_matrix_sync(fm, Mb + m0 * CS + k0, CS);
+                wmma::load_matrix_sync(fv, Vnb + k0 * BV, BV);
+                wmma::mma_sync(a3, fm, fv, a3);
+            }
+            wmma::store_matrix_sync(os1 + m0 * BV, a2, BV, wmma::mem_row_major);
+            wmma::store_matrix_sync(os2 + m0 * BV, a3, BV, wmma::mem_row_major);
+        }
+    }
+    __syncthreads();
+    for (int e = tid; e < CS * BV; e += NTHREADS) {
+        const int i = e / BV;
+        const int j = e - i * BV;
+        const long tofs = (long)c * CS + i;
+        if (tofs < T) {
+            op[(((long)b * T + tofs) * HV + h) * DV + j0 + j] = __float2bfloat16(os1[e] + os2[e]);
+        }
+    }
+}

@@ -1,0 +1,27 @@
+qwen-drive-edge-orin
+Copyright 2026 hous-lab
+
+This product includes software developed as part of an independent deployment
+study of the Qwen-Drive-1.0-4B model on Jetson AGX Orin.
+
+This repository contains original engineering work (deployment pipeline,
+CUDA kernel, patches, adapters, tooling) licensed under Apache-2.0. It does
+not redistribute any third-party code or model weights. All third-party
+components are used from their own sources:
+
+- Qwen-Drive-1.0-4B model weights and inference code — Qwen team, Alibaba,
+  Apache-2.0 — https://huggingface.co/Qwen/Qwen-Drive-1.0-4B and
+  https://github.com/QwenLM/qwen-drive
+- TensorRT-Edge-LLM (v0.9.1) build toolchain and plugin framework — NVIDIA,
+  Apache-2.0 — https://github.com/NVIDIA/TensorRT-Edge-LLM
+- PhysicalAI Autonomous Vehicles dataset — NVIDIA, NVIDIA AV Dataset License
+  (gated download) — https://huggingface.co/datasets/nvidia/PhysicalAI-Autonomous-Vehicles
+- AlpaSim closed-loop evaluation environment — NVIDIA,
+  https://github.com/NVlabs/alpasim
+- NVlabs alpamayo-recipes (PAI dataset interface used by eval/adapter) —
+  https://github.com/NVlabs/alpamayo-recipes
+- flash-linear-attention (FLA) — reference chunked delta-rule implementation
+  studied during kernel development — https://github.com/fla-org/flash-linear-attention
+
+This deployment study is an independent engineering effort and is not
+affiliated with, or endorsed by, Qwen/Alibaba or NVIDIA.

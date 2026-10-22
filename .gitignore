@@ -1,0 +1,44 @@
+# Regenerable artifacts — never tracked
+*.engine
+*.plan
+*.onnx
+*.npz
+*.npy
+*.pkl
+*.safetensors
+*.engine.bak
+*.log
+*.tmp
+
+# Build outputs
+build*/
+
+# Local work dirs
+_staging/
+.omc/
+work/
+workdir/
+edgellm_work*/
+edgellm_out*/
+scene_cache/
+chain_out/
+archives/
+calib/
+logs/
+
+# Data
+frames/
+*.tar.gz
+*.zip
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# OS / editor
+.DS_Store
+*.swp
