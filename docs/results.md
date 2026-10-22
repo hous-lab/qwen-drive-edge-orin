@@ -3,7 +3,8 @@
 All numbers: Jetson AGX Orin 64GB, locked clocks, fp16 TRT engines, single
 stream, batch 1. Latencies are wall-clock means over the certified run
 window (2026-10-12 production baseline v2); accuracy numbers are the
-94-scene trajectory gate.
+94-scene open-loop trajectory gate (engine arm vs torch reference arm over
+the same scenes; no closed-loop evaluation was executed in this project).
 
 ## Production chain (certified v2 baseline)
 
@@ -14,7 +15,7 @@ window (2026-10-12 production baseline v2); accuracy numbers are the
 | Planner | torch eager (PlanningExpert, one-step) | 1162.7 ms |
 | End to end | vision + text + planner | 2191.5 ms |
 
-## 94-scene trajectory gate
+## 94-scene open-loop trajectory gate
 
 | Metric | Value | Criterion |
 |---|---|---|

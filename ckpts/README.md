@@ -1,7 +1,8 @@
 # ckpts — artifact policy and download table
 
 **Upstream-hosted files are LINK-ONLY by policy.** This repo does not ship or
-rehost any third-party weights or dataset files. Download them from the
+rehost any third-party weights or dataset files — and the same applies to
+retrained/QAT variants derived from them. Download upstream files from the
 sources below into the workspace layout, then verify sha256 before running
 the pipeline.
 

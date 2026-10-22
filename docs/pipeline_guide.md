@@ -60,8 +60,9 @@ kernels/README.md for the distinction and why the clean rebuild is the
 reproducible path.
 
 ### Chain gate (step 10)
-Two arms over the same scene set: the torch reference arm (pure bf16 eager,
-no engines) and the engine arm (vision + text engines + torch planner).
+Open-loop comparison over the same scene set, two arms: the torch reference
+arm (pure bf16 eager, no engines) and the engine arm (vision + text engines +
+torch planner).
 `eval_chain_v3.py` compares per-scene trajectories and archives a summary;
 aggregate-blocking verdict (any criterion tripped = FAIL) with the criteria
 in `configs/manifest_f2_05.env`.

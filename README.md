@@ -5,9 +5,10 @@ Deployment artifacts and evaluation harness for running the Qwen-Drive-1.0
 chunk-prefill kernel for the GDN layers inside NVIDIA TensorRT-Edge-LLM,
 fp16 engines for vision and text prefill, and the torch planner on top.
 
-The pipeline passes a 94-scene trajectory gate (mean abs delta 1.31 cm)
-end-to-end on Orin, with the engine chain at 2191.5 ms per step vs the
-torch bf16 reference chain.
+The pipeline passes a 94-scene open-loop trajectory gate (engine arm vs
+torch reference arm, mean abs delta 1.31 cm) on Orin, with the engine chain
+at 2191.5 ms per step. Closed-loop evaluation is documented as a pointer
+only (ckpts/README.md).
 
 ## Results
 
