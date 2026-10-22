@@ -26,7 +26,13 @@ from them at run time.
 | `text_ref_bundle_f2.npz` | ~105 MB | f2 gate inputs: inputs_embeds [T=1141, 2560] fp16 + arange-rope reference logits/KV |
 
 sha256 pins (first 8 hex) for both files are in `ckpts/README.md` of the
-GitHub repo; the full hashes are recorded here after upload verification.
+GitHub repo. Full hashes of published files:
+
+- `text_ref_bundle_f2.npz`:
+  `795d7bf23267abf537623667e26deadfec2ed273f5b7490f5c6628dfed6e386a`
+  (verified against the HF LFS hash at upload)
+- `mrope_golden_f2.npz`: appended after its upload (planned in the Orin
+  window; pin `0f4e8bad` in the meantime)
 
 ## Usage
 
