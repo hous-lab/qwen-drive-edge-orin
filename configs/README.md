@@ -8,9 +8,9 @@ documentation; env vars remain the source of truth at run time.
 
 | File | What it pins |
 |---|---|
-| `text_engine_build.env` | cmake flags for the Orin plugin/toolchain build (`build_plugin_orin.sh` encodes the same values) |
-| `vision_engine_build.env` | trtexec flags for the fp16 vision engine |
-| `manifest_f2_05.env` | eval manifest contract used by the 94-scene gate |
+| [text_engine_build.env](text_engine_build.env) | cmake flags for the Orin plugin/toolchain build ([build_plugin_orin.sh](../export/patches/orin_text_engine/build_plugin_orin.sh) encodes the same values) |
+| [vision_engine_build.env](vision_engine_build.env) | trtexec flags for the fp16 vision engine |
+| [manifest_f2_05.env](manifest_f2_05.env) | eval manifest contract used by the 94-scene gate |
 
 ## Production configuration (certified)
 

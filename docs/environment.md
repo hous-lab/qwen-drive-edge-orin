@@ -36,5 +36,5 @@ pip install torch==2.8.0 transformers==5.14.1 onnxruntime==1.23.2 safetensors
 TensorRT-Edge-LLM v0.9.1 upstream targets TensorRT >= 10.5; the certified
 Orin build carried a small compat delta (trtUtils.cpp, one header, cmake
 fragments) so the tree builds against TRT 10.4. Until that delta lands in
-`export/patches/`, consumers on TRT 10.4 need it from the certified lineage;
+[export/patches/](../export/patches/), consumers on TRT 10.4 need it from the certified lineage;
 consumers on TRT >= 10.5 build stock v0.9.1 + the GDN patch only.

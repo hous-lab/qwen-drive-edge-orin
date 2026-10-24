@@ -25,8 +25,9 @@ from them at run time.
 | `mrope_golden_f2.npz` | ~76 MB | Composite M-RoPE reference for the f2 manifest: pos3d, rope_table rows, post-rope golden KV of the 8 full-attention layers |
 | `text_ref_bundle_f2.npz` | ~105 MB | f2 gate inputs: inputs_embeds [T=1141, 2560] fp16 + arange-rope reference logits/KV |
 
-sha256 pins (first 8 hex) for both files are in `ckpts/README.md` of the
-GitHub repo. Full hashes of published files:
+sha256 pins (first 8 hex) for both files are in
+[ckpts/README.md](https://github.com/hous-lab/qwen-drive-edge-orin/blob/main/ckpts/README.md)
+of the GitHub repo. Full hashes of published files:
 
 - `text_ref_bundle_f2.npz`:
   `795d7bf23267abf537623667e26deadfec2ed273f5b7490f5c6628dfed6e386a`

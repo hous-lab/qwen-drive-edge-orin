@@ -3,7 +3,7 @@
 This bundle adapts NVIDIA TensorRT-Edge-LLM v0.9.1 for the qwen3_5_text
 prefill engine on Jetson AGX Orin (TRT 10.4, JetPack 6.x): it dispatches
 `seq_len > 1` GDN prefill to our sm_87 chunk-prefill kernel (shipped under
-`kernels/` at the repo root) instead of the official CuTe prefill path,
+[kernels/](../../../kernels/) at the repo root) instead of the official CuTe prefill path,
 which outputs all zeros on sm_87.
 
 ## Baseline
@@ -14,22 +14,22 @@ which outputs all zeros on sm_87.
   carry — the first Orin build fails exactly there. The production lineage
   trees carry the TRT-10.4 compat deltas (`trtUtils.cpp` stream-API variant,
   `cpp/cuda126_cutedsl_compat.h` force-included into kernels/plugin targets,
-  and Orin-proven `cmake/` fragments); extraction into `export/patches/` is
-  the documented known gap — see docs/environment.md.
+  and Orin-proven `cmake/` fragments); extraction into [export/patches/](../) is
+  the documented known gap — see [docs/environment.md](../../../docs/environment.md).
 - `builder/llmBuilder.cpp`, `gatedDeltaNetPlugin`, `attentionPlugin` and
   `causalConvPlugin` are identical between the lineages, so the x86-exported
   ONNX ops are compatible with this base; the dispatch patch applies
   unchanged (the GDN runner `cuteDslGDNRunner.cpp` is identical pre-patch).
-- Apply the bundle to a fresh tree per `build_plugin_orin.sh`; keep
+- Apply the bundle to a fresh tree per [build_plugin_orin.sh](build_plugin_orin.sh); keep
   vision-engine builds on their own tree and plugin .so.
 
 ## What's here
 
 | file | role |
 |---|---|
-| `0001-gdn-sm87-chunk-prefill-dispatch.patch` | Modifies `cpp/kernels/gdnKernels/cuteDslGDNRunner.cpp`: dispatch `seq_len > 1 && sm < 100` to `runGdnChunkPrefillSm87()` before the (sm_87-broken) official CuTe prefill. Decode (`seq_len==1`), MTP, DDTree paths untouched. |
-| `files/cpp/kernels/gdnKernels/gdnChunkPrefillSm87.h/.cu` | NEW files: fp16/bf16 adapters + gate math + q/k L2 norm around `deltanet_chunk_prefill` (the chunked delta-rule kernel shipped under `kernels/`), plus a growth-only static scratch shared by all plugin instances. |
-| `files/cpp/kernels/posEncoding/applyRopeWriteKV.cu` | Overrides the base-tree copy: a debug printf block is wrapped in `#ifdef EDGE_GDN_WRITEKV_DEBUG` (stripped by default); re-enable per-build by adding `-DEDGE_GDN_WRITEKV_DEBUG` to the plugin target's compile flags. |
+| [0001-gdn-sm87-chunk-prefill-dispatch.patch](0001-gdn-sm87-chunk-prefill-dispatch.patch) | Modifies `cpp/kernels/gdnKernels/cuteDslGDNRunner.cpp`: dispatch `seq_len > 1 && sm < 100` to `runGdnChunkPrefillSm87()` before the (sm_87-broken) official CuTe prefill. Decode (`seq_len==1`), MTP, DDTree paths untouched. |
+| [files/cpp/kernels/gdnKernels/gdnChunkPrefillSm87.h](files/cpp/kernels/gdnKernels/gdnChunkPrefillSm87.h) / [.cu](files/cpp/kernels/gdnKernels/gdnChunkPrefillSm87.cu) | NEW files: fp16/bf16 adapters + gate math + q/k L2 norm around `deltanet_chunk_prefill` (the chunked delta-rule kernel shipped under [kernels/](../../../kernels/)), plus a growth-only static scratch shared by all plugin instances. |
+| [files/cpp/kernels/posEncoding/applyRopeWriteKV.cu](files/cpp/kernels/posEncoding/applyRopeWriteKV.cu) | Overrides the base-tree copy: a debug printf block is wrapped in `#ifdef EDGE_GDN_WRITEKV_DEBUG` (stripped by default); re-enable per-build by adding `-DEDGE_GDN_WRITEKV_DEBUG` to the plugin target's compile flags. |
 | `files/cpp/kernels/gatedRmsNorm/gatedRmsNormKernel.h/.cu` | NEW files: fused `y = w · RMSNorm(o) · silu(z)` kernel, fp16 I/O + fp32 math, one warp per (token, v-head) row. |
 | `files/cpp/plugins/gatedRmsNormPlugin/gatedRmsNormPlugin.h/.cpp` | NEW files: IPluginV3 wrapper (`gated_rmsnorm`, TRT-10.4 API: `IPluginV3OneBuildV2`/`IPluginCreatorV3One`, eps float attr). Consumes GDN plugin O + per-head gate z + norm weight. Both auto-globbed into their CMake targets. |
 
@@ -56,7 +56,7 @@ binary serves both paths.
 - Scratch: one growth-only `cudaMalloc`, shared by all 24 plugin instances
   (sequential within one enqueue). ~100 MB class at T=640, B=1.
 - M-RoPE feeding: prefill table row t = composite mrope row of token t
-  (`runtime/chain/mrope_rows.py`, kv_start=0 → kernel reads row = token
+  ([runtime/chain/mrope_rows.py](../../../runtime/chain/mrope_rows.py), kv_start=0 → kernel reads row = token
   index). Pad rows >= S are arbitrary (arange) — never read. Decode tokens
   are text (t=h=w=position), so the standard arange row is already correct.
   One hard lesson from the bring-up: a numpy transpose view (F-contiguous
@@ -92,7 +92,7 @@ Run the shipped build script on the Orin host:
 
     bash export/patches/orin_text_engine/build_plugin_orin.sh
 
-Steps inside: stage `files/` over the checkout → apply the dispatch patch →
+Steps inside: stage [files/](files/) over the checkout → apply the dispatch patch →
 cmake configure (Release / CUDA 12.6 / ARCH 87) → build
 `NvInfer_edgellm_plugin`. Runtime needs the plugin on the loader path:
 `EDGELLM_PLUGIN_PATH=$QD_PLUGIN_SO`.

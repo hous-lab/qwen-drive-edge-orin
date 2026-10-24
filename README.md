@@ -30,7 +30,7 @@ The pipeline passes a 94-scene open-loop trajectory gate (engine vs torch refere
 ## Get started
 
 1. Clone this repo and the upstream qwen-drive repo side by side, the two-repo workspace contract in [scripts/env_orin.sh](scripts/env_orin.sh) OR [scripts/env_x86.sh](scripts/env_x86.sh).
-2. `./scripts/fetch_upstream.sh` after filling a copy of `scripts/env_x86.sh` — pulls the model weights, clones the upstream code, and prints the gated [PAI dataset](https://huggingface.co/datasets/nvidia/PhysicalAI-Autonomous-Vehicles) steps.
+2. `./scripts/fetch_upstream.sh` after filling a copy of [scripts/env_x86.sh](scripts/env_x86.sh) — pulls the model weights, clones the upstream code, and prints the gated [PAI dataset](https://huggingface.co/datasets/nvidia/PhysicalAI-Autonomous-Vehicles) steps.
 3. `./run_pipeline.sh <env.sh> x86` — data adapter, vision ONNX export + gate, text gate reference.
 4. On Orin: `./run_pipeline.sh <env.sh> orin` — plugin build, kernel parity gate, chain gate.
 
@@ -42,17 +42,17 @@ The pipeline passes a 94-scene open-loop trajectory gate (engine vs torch refere
 
 ## Repository map
 
-- `export/` — x86 exporters and gates (vision ONNX, text reference bundle)
-- `kernels/` — the sm_87 GDN chunk-prefill kernel, parity harness, and the production-integration notes (kernels/README.md)
-- `runtime/chain/` — chain runner + evaluation gates
-- `eval/adapter/` — PAI dataset adapter
-- `export/patches/orin_text_engine/` — Edge-LLM patch bundle + build script
-- `configs/` — certified build flags and the f2_05 eval manifest
-- `docs/` — environment, pipeline guide, results, negative results
-- `ckpts/README.md` — upstream artifact policy + download table
+- [export/](export/) — x86 exporters and gates (vision ONNX, text reference bundle)
+- [kernels/](kernels/) — the sm_87 GDN chunk-prefill kernel, parity harness, and the production-integration notes [kernels/README.md](kernels/README.md)
+- [runtime/chain/](runtime/chain/) — chain runner + evaluation gates
+- [eval/adapter/](eval/adapter/) — PAI dataset adapter
+- [export/patches/orin_text_engine/](export/patches/orin_text_engine/) — Edge-LLM patch bundle + build script
+- [configs/](configs/) — certified build flags and the f2_05 eval manifest
+- [docs/](docs/) — environment, pipeline guide, results, negative results
+- [ckpts/README.md](ckpts/README.md) — upstream artifact policy + download table
 
 ## Acknowledgements and license
 
 Apache-2.0. Built on the [Qwen-Drive-1.0-4B](https://huggingface.co/Qwen/Qwen-Drive-1.0-4B) model (Apache-2.0) and NVIDIA [TensorRT-Edge-LLM](https://github.com/NVIDIA/TensorRT-Edge-LLM).
 PAI driving data via the gated NVIDIA [PhysicalAI AV dataset](https://huggingface.co/datasets/nvidia/PhysicalAI-Autonomous-Vehicles).
-This is an independent engineering effort, not affiliated with Qwen, NVIDIA, or the dataset authors — see NOTICE for the full attribution list.
+This is an independent engineering effort, not affiliated with Qwen, NVIDIA, or the dataset authors — see [NOTICE](NOTICE) for the full attribution list.

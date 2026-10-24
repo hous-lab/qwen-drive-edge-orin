@@ -37,5 +37,5 @@ decoupled in this system: a kv-cos basin near 0.88 in one measurement lane
 persisted across the release and is documented as UNRESOLVED — it does not
 propagate to closed-loop trajectory behavior. We flag this because a parity
 lane that disagrees with task metrics is a real engineering signal, not a
-box-check; see docs/negative_results.md for the measurement-chain caveats
+box-check; see [docs/negative_results.md](negative_results.md) for the measurement-chain caveats
 that produced it.
