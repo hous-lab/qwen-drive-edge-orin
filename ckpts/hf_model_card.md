@@ -32,8 +32,9 @@ of the GitHub repo. Full hashes of published files:
 - `text_ref_bundle_f2.npz`:
   `795d7bf23267abf537623667e26deadfec2ed273f5b7490f5c6628dfed6e386a`
   (verified against the HF LFS hash at upload)
-- `mrope_golden_f2.npz`: appended after its upload (planned in the Orin
-  window; pin `0f4e8bad` in the meantime)
+- `mrope_golden_f2.npz`:
+  `0f4e8bad89d74da807f50f4a033117794783d522362763186afd5cdf9acbb76e`
+  (verified against the HF LFS hash at upload)
 
 ## Usage
 

@@ -11,10 +11,10 @@
 # Compat note: a stock v0.9.1 checkout targets TRT >= 10.5 (desktop). JetPack
 # 6.x ships TRT 10.3 (libnvinfer) / 10.4 (python wheel), so the checkout needs
 # the TRT-10.4 compat deltas before it configures: trtUtils.cpp
-# (IStreamReaderV2 -> stream-API), cuda126_cutedsl_compat.h
-# (force-included by kernels/plugin targets), and the Orin cmake/ fragments.
-# These are carried by the production lineage trees; see
-# docs/environment.md for the extraction procedure and md5 anchors.
+# (IStreamReaderV2 -> IStreamReader), cuda126_cutedsl_compat.h (CUDA 12.6 shim
+# force-included by kernels/plugin targets), and the CuteDsl/XQACubins cmake
+# overrides. All four ship in files/ and are staged by the same rsync step
+# as the kernel files.
 set -euo pipefail
 
 SRC=${QD_EDGELLM_SRC:?set QD_EDGELLM_SRC to the v0.9.1 checkout on the Orin}
@@ -34,8 +34,18 @@ else
     patch -p1 < 0001-gdn-sm87-chunk-prefill-dispatch.patch
 fi
 
+echo "== 1b. submodule guard =="
+if [ ! -f "$SRC/3rdParty/nlohmannJson/include/nlohmann/json.hpp" ]; then
+    echo "FAIL: 3rdParty/nlohmannJson is empty — the nlohmann-json submodule" >&2
+    echo "content is missing from the checkout. Fix with, for a git clone:" >&2
+    echo "  git -C $SRC submodule update --init 3rdParty/nlohmannJson" >&2
+    echo "or copy include/nlohmann/json.hpp from the upstream nlohmann-json" >&2
+    echo "release into that path (v3.x, as in the certified lineage)." >&2
+    exit 1
+fi
+
 echo "== 2. stage the GDN kernel (canonical entry; shipped source md5 a065f1bf) =="
-cp -p "$HERE/../../kernels/chunk_delta_cuda.cu" "$HERE/../../kernels/chunk_delta_cuda.h" \
+cp -p "$HERE/../../../kernels/chunk_delta_cuda.cu" "$HERE/../../../kernels/chunk_delta_cuda.h" \
     "$SRC/cpp/kernels/gdnKernels/"
 
 echo "== 3. cmake configure + build =="

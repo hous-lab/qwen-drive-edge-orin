@@ -5,6 +5,11 @@
 # Engine builds (vision trtexec / text Edge-LLM) are thin build commands
 # documented in configs/*.env and export/patches/orin_text_engine/README.md;
 # their guards below fail with a build pointer when the outputs are missing.
+# Chain gate: the engine arm runs --text-engine only (torch vision eager +
+# eager planner) — the text engine and the vision/planner engines must never
+# share one process (multi-engine co-residency corrupts small tensors; the
+# runner hard-rejects the combination). The vision engine is built + guarded
+# and consumed by its own gate (gate_vision_edgellm.py).
 # Stage-by-stage manual: docs/pipeline_guide.md
 #
 # Usage:
@@ -136,23 +141,23 @@ if [[ $STAGE == orin || $STAGE == all ]]; then
     if [[ -f $CHAIN_OUT/eval_v3_summary.json ]]; then
         echo "exists, reusing: $CHAIN_OUT/eval_v3_summary.json"
     else
-        mkdir -p "$CHAIN_OUT/base" "$CHAIN_OUT/eng"
+        mkdir -p "$CHAIN_OUT"
         "$QD_PY" "$REPO_ROOT/runtime/chain/chain_runner.py" \
             --model-dir "$QD_MODEL_DIR" \
-            --planner "$QD_MODEL_DIR/perception" \
+            --planner "$QD_MODEL_DIR/planner-rl" \
             --scenes "$QD_RUNTIME_DIR/data/qwen_scenes_chunk0.jsonl" --image-root "$QD_RUNTIME_DIR/data" \
             --num-steps 10 --kvlen 4096 --dtype bf16 \
-            --output "$CHAIN_OUT/base"
+            --output "$CHAIN_OUT/base.jsonl"
         "$QD_PY" "$REPO_ROOT/runtime/chain/chain_runner.py" \
             --model-dir "$QD_MODEL_DIR" \
-            --planner "$QD_MODEL_DIR/perception" \
+            --planner "$QD_MODEL_DIR/planner-rl" \
             --scenes "$QD_RUNTIME_DIR/data/qwen_scenes_chunk0.jsonl" --image-root "$QD_RUNTIME_DIR/data" \
             --num-steps 10 --kvlen 4096 --dtype bf16 \
-            --vision-engine "$VISION_ENGINE" --text-engine "$TEXT_ENGINE" \
-            --output "$CHAIN_OUT/eng"
-        "$QD_PY" "$REPO_ROOT/runtime/chain/eval_chain_v3.py" "$CHAIN_OUT/base" "$CHAIN_OUT/eng" "$CHAIN_OUT/eval_v3_summary.json" "eng"
+            --text-engine "$TEXT_ENGINE" \
+            --output "$CHAIN_OUT/eng.jsonl"
+        "$QD_PY" "$REPO_ROOT/runtime/chain/eval_chain_v3.py" "$CHAIN_OUT/base.jsonl" "$CHAIN_OUT/eng.jsonl" "$CHAIN_OUT/eval_v3_summary.json" "eng"
     fi
-fi
 
+fi
 step 99 "done"
 echo "All requested stages completed. Gate criteria: configs/manifest_f2_05.env"

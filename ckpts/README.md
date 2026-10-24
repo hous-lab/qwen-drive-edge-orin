@@ -11,7 +11,7 @@ the pipeline.
 | Artifact | Source | License | Local placement |
 |---|---|---|---|
 | Qwen-Drive-1.0-4B weights | https://huggingface.co/Qwen/Qwen-Drive-1.0-4B | Apache-2.0 | `$QD_MODEL_DIR` (root: config.json, *.safetensors, tokenizer) |
-| Qwen-Drive-1.0-4B planner weights | same HF repo, `perception/` subfolder | Apache-2.0 | `$QD_MODEL_DIR/perception` |
+| Qwen-Drive-1.0-4B planner weights | same HF repo, `planner-rl/` subfolder (the certified gate planner) | Apache-2.0 | `$QD_MODEL_DIR/planner-rl` |
 | Upstream inference code | https://github.com/QwenLM/qwen-drive | Apache-2.0 | `$QD_UPSTREAM_REPO` (`pip install -e`) |
 | TensorRT-Edge-LLM v0.9.1 | https://github.com/NVIDIA/TensorRT-Edge-LLM (tag v0.9.1) | Apache-2.0 | `$QD_EDGELLM_SRC` |
 | PhysicalAI Autonomous Vehicles chunk 0 | https://huggingface.co/datasets/nvidia/PhysicalAI-Autonomous-Vehicles | NVIDIA AV Dataset License (gated) | `$QD_DATA_ROOT` per [eval/adapter/pai_to_qwen.py](../eval/adapter/pai_to_qwen.py) |

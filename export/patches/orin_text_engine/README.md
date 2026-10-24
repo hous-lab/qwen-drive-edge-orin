@@ -11,11 +11,11 @@ which outputs all zeros on sm_87.
 - Repo: `TensorRT-Edge-LLM` v0.9.1, git `7f061f2`. A stock v0.9.1 checkout
   targets TRT >= 10.5 (desktop): its `cpp/common/trtUtils.cpp` uses the
   `IStreamReaderV2` API that JetPack 6.x's TRT 10.4 python wheel does not
-  carry — the first Orin build fails exactly there. The production lineage
-  trees carry the TRT-10.4 compat deltas (`trtUtils.cpp` stream-API variant,
-  `cpp/cuda126_cutedsl_compat.h` force-included into kernels/plugin targets,
-  and Orin-proven `cmake/` fragments); extraction into [export/patches/](../) is
-  the documented known gap — see [docs/environment.md](../../../docs/environment.md).
+  carry — the first Orin build fails exactly there. The full TRT-10.4 compat
+  delta (the `files/` overrides in the table below: stream-reader trtUtils,
+  CUDA 12.6 CuTe-DSL shim, the two CMake overrides and build-config variants,
+  the FP4-term drop, and the FMHA cubin-load hardening) is shipped in this
+  bundle and staged by the same rsync step as the kernel files.
 - `builder/llmBuilder.cpp`, `gatedDeltaNetPlugin`, `attentionPlugin` and
   `causalConvPlugin` are identical between the lineages, so the x86-exported
   ONNX ops are compatible with this base; the dispatch patch applies
@@ -32,15 +32,39 @@ which outputs all zeros on sm_87.
 | [files/cpp/kernels/posEncoding/applyRopeWriteKV.cu](files/cpp/kernels/posEncoding/applyRopeWriteKV.cu) | Overrides the base-tree copy: a debug printf block is wrapped in `#ifdef EDGE_GDN_WRITEKV_DEBUG` (stripped by default); re-enable per-build by adding `-DEDGE_GDN_WRITEKV_DEBUG` to the plugin target's compile flags. |
 | `files/cpp/kernels/gatedRmsNorm/gatedRmsNormKernel.h/.cu` | NEW files: fused `y = w · RMSNorm(o) · silu(z)` kernel, fp16 I/O + fp32 math, one warp per (token, v-head) row. |
 | `files/cpp/plugins/gatedRmsNormPlugin/gatedRmsNormPlugin.h/.cpp` | NEW files: IPluginV3 wrapper (`gated_rmsnorm`, TRT-10.4 API: `IPluginV3OneBuildV2`/`IPluginCreatorV3One`, eps float attr). Consumes GDN plugin O + per-head gate z + norm weight. Both auto-globbed into their CMake targets. |
+| [files/cpp/common/trtUtils.cpp](files/cpp/common/trtUtils.cpp) | TRT-10.4 compat override: the stock `IStreamReaderV2` file-reader becomes `IStreamReader` (JetPack 6.x's TRT 10.4 wheel carries the V1 stream reader only); this is the exact API the first Orin build fails on. |
+| [files/cpp/cuda126_cutedsl_compat.h](files/cpp/cuda126_cutedsl_compat.h) | NEW file: CUDA 12.6 shim for CuTe-DSL's 12.8+ runtime module API (`cudaLibrary_t` typedef + `cudaLibraryUnload` decl; definition linked from the tree's cudart shim). Force-included into kernels/plugin targets. |
+| [files/cmake/CuteDsl.cmake](files/cmake/CuteDsl.cmake) | Override: links `trt_edgellm_cutedsl_cudart_shim` into CuTe-DSL targets (pairs with the compat header above). |
+| [files/cmake/XQACubins.cmake](files/cmake/XQACubins.cmake) | Override: appends the native SM to XQA cubin generation, so decode XQA kernels match the running hardware even when `CMAKE_CUDA_ARCHITECTURES` omits it (Orin sm_87 vs the FMHA `80;86;89` set). |
+| [files/cpp/CMakeLists.txt](files/cpp/CMakeLists.txt) | Override: the three `target_compile_options` that force-include [files/cpp/cuda126_cutedsl_compat.h](files/cpp/cuda126_cutedsl_compat.h) into edgellmKernels/edgellmCore/the plugin target, plus `plugins/*.cu` globbed into the plugin library (the gated_rmsnorm kernel needs this) and sm_87 in the FMHA SM list. Stock + 5 lines; without it the CuTe-DSL artifact headers fail on CUDA 12.6 (`cudaLibrary_t`/`cudaLibraryUnload` unknown). |
+| [files/CMakeLists.txt](files/CMakeLists.txt) | Override (one line): `cublas` dropped from the `commonLibraryExt` INTERFACE link set. |
+| [files/cpp/plugins/fusedNvfp4GemmAllReducePlugin/fusedNvfp4GemmAllReducePlugin.cpp](files/cpp/plugins/fusedNvfp4GemmAllReducePlugin/fusedNvfp4GemmAllReducePlugin.cpp) | TRT-10.4 compat: `nvinfer1::DataType::kFP4` does not exist before TRT 10.5 — both `supportsFormatCombination` predicates drop the FP4 term, so FP4 formats are never selected (matching what TRT 10.4 could build anyway). |
+| [files/cpp/kernels/contextAttentionKernels/contextFMHARunner.cpp](files/cpp/kernels/contextAttentionKernels/contextFMHARunner.cpp) | Production-verified hardening override: stock code loads FMHA cubins with `CUDA_DRIVER_CHECK(cuModuleLoadData(...))` and **aborts** the process when a cubin fails to load for the running SM (two sm_87 FMHA cubins legitimately fail with driver error 200 on Orin at first use). The certified copy loads a malloc'd copy via `cuModuleLoadDataEx` and skips the failed kernel with `LOG_WARNING` + `continue` (copies owned in `mOwnedCubins`). Without this override the clean-rebuilt plugin aborts at runtime, exactly as the certified bring-up observed. |
+
+
+Deltas deliberately shipped as stock: the certified bring-up tree carried
+further local edits that this bundle intentionally does not reproduce —
+debug-print debris in embeddingKernels.cu, the unused event-centric
+explanation additions in llmInferenceRuntime, python-side int8dyn fusion
+hooks (never exercised by the fp16 production graph), and the
+alpamayo1ActionRunner/examples additions (out of scope here). A recursive
+diff of a staged tree against stock v0.9.1 therefore shows exactly the
+table above plus the dispatch patch and the two staged kernel files.
 
 ## Why
 
 Official GDN prefill on sm_87 outputs ALL ZEROS (Prefill + PrefillPadding
 FAILED in the AOT kernel's own self-check; only decode passes; the
-Blackwell-prefill variant is gated SM >= 100). Our kernel passed the
-real-activation fixture gates (output cos >= 0.9999 / state rel < 1e-3,
-layer00/layer30) on sm_87. Dispatch sits in `CuteDslGDNRunner::run()` so one
-binary serves both paths.
+Blackwell-prefill variant is gated SM >= 100). Kernel numerics on sm_87
+(state track, fp32): rel ~1e-5 vs the fp32 reference with cos 1.000000 on
+real-activation fixtures at T=3385; the bf16 output track pins tensor L2 rel
+at ~2-3e-3 (half a bf16 ulp), validated at model level (KV cos >= 0.9996,
+trajectory cos 0.99997) and by the 94-scene open-loop trajectory gate. The
+production-contract parity arm (q/k L2-normalized) passes the blanket parity
+bar 6/6 (rel <= 9.8e-3, cos >= 0.99991); the raw (non-normalized) arm sits at
+1.2-1.5e-2 at B=2 in the certified records on both x86 and Orin - the same
+signature the shipped harness reproduces. Dispatch sits in
+`CuteDslGDNRunner::run()` so one binary serves both paths.
 
 ## Contract notes (gdnChunkPrefillSm87)
 

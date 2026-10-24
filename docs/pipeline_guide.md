@@ -60,8 +60,9 @@ reproducible path.
 
 ### Chain gate (step 10)
 Open-loop comparison over the same scene set, two arms: the torch reference
-arm (pure bf16 eager, no engines) and the engine arm (vision + text engines +
-torch planner).
+arm (pure bf16 eager, no engines) and the engine arm (text engine in-loop;
+torch vision eager + eager planner — the text engine must never share a
+process with the vision/planner engines, see [run_pipeline.sh](../run_pipeline.sh) header note).
 [eval_chain_v3.py](../runtime/chain/eval_chain_v3.py) compares per-scene trajectories and archives a summary;
 aggregate-blocking verdict (any criterion tripped = FAIL) with the criteria
 in [configs/manifest_f2_05.env](../configs/manifest_f2_05.env).
