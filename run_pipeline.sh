@@ -122,7 +122,7 @@ if [[ $STAGE == x86 || $STAGE == all ]]; then
             echo "exists, reusing: $PLANNER_OUT/planner_dyn.onnx"
         else
             "$QD_PY" "$REPO_ROOT/export/planner/export_planner_onnx.py" \
-                --model-dir "$QD_MODEL_DIR" --planner planner-rl --dynamic \
+                --model-dir "$QD_MODEL_DIR" --planner "$QD_MODEL_DIR/planner-rl" --dynamic \
                 --out "$PLANNER_OUT/planner_dyn.onnx" 2>&1 | tee "$PLANNER_OUT/export.log"
             grep -q "^EXPORT PASS" "$PLANNER_OUT/export.log" \
                 || die "planner ONNX export gate A/B not PASS (export.log)"
@@ -182,7 +182,7 @@ if [[ $STAGE == orin || $STAGE == all ]]; then
         PLAN="$PLANNER_OUT/planner_one_step_dyn_bf16.plan"
         if [[ ! -f $PLANNER_OUT/planner_gate_bundle_s1141.npz ]]; then
             "$QD_PY" "$REPO_ROOT/export/planner/dump_gate_bundle.py" \
-                --model-dir "$QD_MODEL_DIR" --planner planner-rl --scene-len 1141 \
+                --model-dir "$QD_MODEL_DIR" --planner "$QD_MODEL_DIR/planner-rl" --scene-len 1141 \
                 --out "$PLANNER_OUT/planner_gate_bundle_s1141.npz"
         fi
         if [[ ! -f $PLAN ]]; then

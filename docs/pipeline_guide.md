@@ -66,3 +66,19 @@ process with the vision/planner engines, see [run_pipeline.sh](../run_pipeline.s
 [eval_chain_v3.py](../runtime/chain/eval_chain_v3.py) compares per-scene trajectories and archives a summary;
 aggregate-blocking verdict (any criterion tripped = FAIL) with the criteria
 in [configs/manifest_f2_05.env](../configs/manifest_f2_05.env).
+
+### Optional fast lane (steps 5b / 9b / 10b, QD_FAST_LANE=1)
+The one-step planner engine lane: a dynamic-S bf16 trtexec engine replaces
+each planner call with ONE engine invocation per scene instead of the 10-step
+eager sampler rollout. Steps: the x86 ONNX export ([export/planner/export_planner_onnx.py](../export/planner/export_planner_onnx.py),
+export-time gate A checks serialization fidelity; gate B prints the wrapper
+structure's bf16 fidelity as evidence) transfers to the Orin, where the
+byte-exact bf16 gate bundle ([export/planner/dump_gate_bundle.py](../export/planner/dump_gate_bundle.py)) and
+the engine are built ([export/planner/build_planner_engine.sh](../export/planner/build_planner_engine.sh), profile
+S[1139..1748..1750]), the engine gate + latency run ([export/planner/gate_planner_engine.py](../export/planner/gate_planner_engine.py)),
+and the 94-scene chain gate re-runs ([runtime/chain/run_planner_fastlane.sh](../runtime/chain/run_planner_fastlane.sh)):
+fresh all-torch 1-step goldens vs the engine arm (vision + planner engines,
+text stays eager per the co-residency rule). The trajectory gate is
+record-only for this lane; the engine-serving contract (PLANNER_ENG line,
+no disabled/eager-fallback) is fatal. Result history and the measured
+latency class: [docs/results.md](docs/results.md).
