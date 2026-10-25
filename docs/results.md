@@ -26,24 +26,41 @@ certified chain keeps the eager rollout. Numbers are stage means over the same 9
 end-to-end mean additionally carries about 20 ms of stage-internal glue
 (mrope merge and cache handoff), so it sits slightly above the four-row sum.
 
-## Fast planner lane (measured, not shipped)
+## Fast planner lane (shipped as an opt-in lane; re-run from this repo's pipeline)
 
-The planner also has a demonstrated fast lane: a dynamic-S TRT bf16 engine
-replaces the whole plan bucket with ONE call per scene instead of the 10-step
-eager rollout. Over full 94-scene runs it calls at 29.9-36.4 ms (p50
-29.87 ms at S=1141), the in-chain plan bucket drops from 1201 ms to
-35.9 ms, and end-to-end reaches 1028 ms (2.11x over the certified eager
-arm); the engine served 100% of planner calls with zero eager fallback, and
-vision+planner engine co-residency was clean over 4 x 94 scenes. It is not
-the shipped config: in the f2 manifest the 94-scene gate read 5.119 cm mean
-abs trajectory delta against the 5.0 cm bar - a marginal FAIL driven by two
-outlier scenes (30.25 / 30.10 cm; one of them is the same scene that is the
-certified 10-step arm's worst at 35.23 cm, i.e. the known degenerate-plan
-family, not engine-specific damage). ADE5/FDE5/NaN were inside bounds and
-the other three gated arms (10-step engine on both manifests, 1-step r640)
-PASSED. Fast-lane timings were taken in a degraded compute window
-(22.0-24.9 TF vs the 27.9 TF anchor) and are provisional; the certified
-table numbers above are from the certified window.
+The planner also has a fast lane, shipped as an opt-in pipeline path
+(`QD_FAST_LANE=1`, steps 5b/9b/10b): a dynamic-S TRT bf16 engine replaces
+the whole plan bucket with ONE call per scene instead of the 10-step eager
+rollout. We re-ran the entire lane end-to-end from the shipped tree
+(x86 ONNX export -> Orin gate bundle -> engine build -> engine gate ->
+94-scene chain gate). Every gate number reproduced the archived internal
+measurement: the chain gate read 5.1194 cm — the same 7 significant figures
+— and the per-scene structure is identical down to the outlier list
+(34 scenes over 5 cm, tops 30.25 / 30.10 / 16.10 / 11.65 cm; one of the two
+30 cm scenes is the certified 10-step arm's worst at 35.23 cm, i.e. the
+known degenerate-plan family, not engine-specific damage). The engine gate
+reproduced bit-consistently (cos 0.99992638, max 0.88 cm, byte-exact gate
+inputs), and the serving contract held: 94/94 planner calls on-engine, zero
+eager fallback.
+
+| Metric (re-run 2026-10-25) | Value | Archived (2026-10-06) |
+|---|---|---|
+| Engine gate at S=1141 (bar cos >= 0.999) | cos 0.99992638, max 0.88 cm, PASS | identical |
+| Engine call p50 (S=1141, n=200) | 29.72 ms | 29.87 ms |
+| In-chain plan bucket | 35.7 ms | 35.9 ms |
+| All-torch 1-step plan bucket (base arm) | 122.8 ms | not measured |
+| End-to-end (1-step arm) | 1026 ms vs 1210 ms base (-184 ms) | 1028 ms |
+| Chain gate (record-only) | 5.1194 cm vs 5.0 cm bar, FAIL marginal | identical |
+| ADE5 / FDE5 relative (vs its 1-step reference) | -0.44% / -0.82% (in band) | in band |
+
+It is not the default config: the 5.1194 cm against the 5.0 cm bar is a
+marginal FAIL driven by the two 30 cm degenerate-family scenes; the
+remaining 92 scenes sit far in band, ADE5/FDE5/NaN are inside bounds, and
+the other three gated arms in the archived matrix (10-step engine on both
+manifests, 1-step r640) PASSED. Re-run timings were taken in a mildly
+degraded compute window (24.2 TF vs the 27.9 TF bf16 anchor, numerics
+anchor-gated) and are provisional; the certified table numbers above are
+from the certified window.
 
 ## 94-scene open-loop trajectory gate
 

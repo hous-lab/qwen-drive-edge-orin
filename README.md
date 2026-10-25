@@ -14,10 +14,12 @@ The pipeline passes a 94-scene open-loop trajectory gate (engine vs torch refere
 | Orchestration (tokenize + glue) | torch | 216.6 ms |
 | End to end | full chain | 2191.5 ms |
 
-A faster planner lane was demonstrated but not shipped: a one-step TRT bf16
-planner engine calls at 29.9-36.4 ms and reaches ~1.0 s end-to-end, but its
+A faster planner lane ships as an opt-in path (`QD_FAST_LANE=1`, re-run
+end-to-end from this repo's pipeline — every gate number reproduced the
+archived measurement to 7 significant figures): a one-step TRT bf16 planner
+engine calls at 29.7-36.4 ms and reaches ~1.03 s end-to-end, but its
 f2-manifest gate read 5.119 cm against the 5 cm bar (two outlier scenes of a
-known degenerate family), so the shipped chain keeps the gate-passing eager
+known degenerate family), so the default chain keeps the gate-passing eager
 rollout. Details in [docs/results.md](docs/results.md).
 
 94-scene trajectory gate (engine vs torch reference, eval_chain_v3 aggregate-blocking):
