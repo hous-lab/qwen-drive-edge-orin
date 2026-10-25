@@ -19,12 +19,31 @@ the same scenes; no closed-loop evaluation was executed in this project).
 The planner stage is the PlanningExpert flow-matching sampler rolled out
 eagerly for its 10 sampling steps (num_steps=10); per-step it measures about
 120 ms eager, 33 ms under a torch-only CUDA-graph context (bitwise-equal),
-and 29.9-36.4 ms as a TRT engine. The CUDA-graph and engine variants were
-not productionized (engine-chain co-residency corruption, and a marginal
-per-scene gate on the one-step engine lane), so the certified chain keeps
-the eager rollout. Numbers are stage means over the same 94-scene run; the
+and 29.9-36.4 ms as a TRT engine. The torch CUDA-graph variant is
+forbidden under engine co-residency; the one-step engine lane missed the
+trajectory gate marginally (see the fast-lane section below), so the
+certified chain keeps the eager rollout. Numbers are stage means over the same 94-scene run; the
 end-to-end mean additionally carries about 20 ms of stage-internal glue
 (mrope merge and cache handoff), so it sits slightly above the four-row sum.
+
+## Fast planner lane (measured, not shipped)
+
+The planner also has a demonstrated fast lane: a dynamic-S TRT bf16 engine
+replaces the whole plan bucket with ONE call per scene instead of the 10-step
+eager rollout. Over full 94-scene runs it calls at 29.9-36.4 ms (p50
+29.87 ms at S=1141), the in-chain plan bucket drops from 1201 ms to
+35.9 ms, and end-to-end reaches 1028 ms (2.11x over the certified eager
+arm); the engine served 100% of planner calls with zero eager fallback, and
+vision+planner engine co-residency was clean over 4 x 94 scenes. It is not
+the shipped config: in the f2 manifest the 94-scene gate read 5.119 cm mean
+abs trajectory delta against the 5.0 cm bar - a marginal FAIL driven by two
+outlier scenes (30.25 / 30.10 cm; one of them is the same scene that is the
+certified 10-step arm's worst at 35.23 cm, i.e. the known degenerate-plan
+family, not engine-specific damage). ADE5/FDE5/NaN were inside bounds and
+the other three gated arms (10-step engine on both manifests, 1-step r640)
+PASSED. Fast-lane timings were taken in a degraded compute window
+(22.0-24.9 TF vs the 27.9 TF anchor) and are provisional; the certified
+table numbers above are from the certified window.
 
 ## 94-scene open-loop trajectory gate
 
