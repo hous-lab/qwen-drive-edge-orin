@@ -12,8 +12,19 @@ the same scenes; no closed-loop evaluation was executed in this project).
 |---|---|---|
 | Vision | TRT fp16 plan (Edge-LLM path) | 211.6 ms |
 | Text prefill | TRT fp16 engine, T=1141 | 580.5 ms |
-| Planner | torch eager (PlanningExpert, one-step) | 1162.7 ms |
+| Planner | torch eager (PlanningExpert sampler, 10-step rollout) | 1162.7 ms |
+| Orchestration | torch glue (tokenize + stage handoff) | 216.6 ms |
 | End to end | vision + text + planner | 2191.5 ms |
+
+The planner stage is the PlanningExpert flow-matching sampler rolled out
+eagerly for its 10 sampling steps (num_steps=10); per-step it measures about
+120 ms eager, 33 ms under a torch-only CUDA-graph context (bitwise-equal),
+and 29.9-36.4 ms as a TRT engine. The CUDA-graph and engine variants were
+not productionized (engine-chain co-residency corruption, and a marginal
+per-scene gate on the one-step engine lane), so the certified chain keeps
+the eager rollout. Numbers are stage means over the same 94-scene run; the
+end-to-end mean additionally carries about 20 ms of stage-internal glue
+(mrope merge and cache handoff), so it sits slightly above the four-row sum.
 
 ## 94-scene open-loop trajectory gate
 

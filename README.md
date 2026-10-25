@@ -10,7 +10,8 @@ The pipeline passes a 94-scene open-loop trajectory gate (engine vs torch refere
 |---|---|---|
 | Vision | TRT fp16 plan | 211.6 ms |
 | Text prefill | TRT fp16 engine, self-developed GDN sm_87 kernel | 580.5 ms (T=1141) |
-| Planner | torch eager (one-step) | 1162.7 ms |
+| Planner | torch eager, 10-step sampler rollout | 1162.7 ms |
+| Orchestration (tokenize + glue) | torch | 216.6 ms |
 | End to end | full chain | 2191.5 ms |
 
 94-scene trajectory gate (engine vs torch reference, eval_chain_v3 aggregate-blocking):
