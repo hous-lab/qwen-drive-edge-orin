@@ -1,8 +1,6 @@
 # Negative results
 
-Quantization and acceleration routes we took to a verdict, with the reason
-each died. Kept so consumers don't re-dig the same graves; root causes are
-measurement-methodology lessons as much as performance ones.
+Quantization and acceleration routes we took to a verdict, with the reason each died. Kept so consumers don't re-dig the same graves; root causes are measurement-methodology lessons as much as performance ones.
 
 ## INT8 / W8A8 routes (all closed)
 
@@ -20,15 +18,9 @@ measurement-methodology lessons as much as performance ones.
 | Plugin into sealed engines | closed | QDQ-form frozen engines carry no plugin nodes; a plugin retrofit requires re-export, not in-place surgery |
 | Co-resident TRT engines | closed for mixed workloads | vision + text engines in one process showed out-of-bounds writes on small tensors (heisenbug, per-engine clean); chain_runner hard-rejects co-residency |
 
-## Methodology takeaways
+## Methodology interpretations
 
-- Gate metrics must be paired to the deployment objective. An arange-vs-arange
-  rope comparison measured nothing about true mrope; a cos gate without an
-  absmax companion is blind to pure-gain errors.
-- Numerical parity lanes and task metrics can disagree; when they do, trust
-  the task metric for go/no-go and keep the parity lane open as a signal, not
-  a verdict.
-- Quantization damage carriers are layer-specific (here: encoder MLP vs
-  attention projections vs decoder); "vision INT8" is not one experiment.
-- Fix noise floors before interpreting small effects: re-run noise
-  (0.012 here) bound what a K16-vs-K8-style lever could ever show.
+- Gate metrics must be paired to the deployment objective. An arange-vs-arange rope comparison measured nothing about true mrope; a cos gate without an absmax companion is blind to pure-gain errors.
+- Numerical parity lanes and task metrics can disagree; when they do, trust the task metric for go/no-go and keep the parity lane open as a signal, not a verdict.
+- Quantization damage carriers are layer-specific (here: encoder MLP vs attention projections vs decoder); "vision INT8" is not one experiment.
+- Fix noise floors before interpreting small effects: the run-to-run noise floor (0.012 here) bounds what a K16-vs-K8-style lever could ever show.
