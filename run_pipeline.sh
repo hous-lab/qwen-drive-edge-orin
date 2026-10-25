@@ -114,6 +114,22 @@ if [[ $STAGE == x86 || $STAGE == all ]]; then
     else
         die "gate reference npz missing under $LOGS_TEXT -- hf download hous-lab/qwen-drive-edge-orin (ckpts/README.md)"
     fi
+    step 5b "x86: planner one-step ONNX export (optional fast lane)"
+    if [[ ${QD_FAST_LANE:-0} == 1 ]]; then
+        PLANNER_OUT="$QD_RUNTIME_DIR/planner_export"
+        mkdir -p "$PLANNER_OUT"
+        if [[ -f $PLANNER_OUT/planner_dyn.onnx && -f $PLANNER_OUT/export_pass.marker ]]; then
+            echo "exists, reusing: $PLANNER_OUT/planner_dyn.onnx"
+        else
+            "$QD_PY" "$REPO_ROOT/export/planner/export_planner_onnx.py" \
+                --model-dir "$QD_MODEL_DIR" --planner planner-rl --dynamic \
+                --out "$PLANNER_OUT/planner_dyn.onnx" 2>&1 | tee "$PLANNER_OUT/export.log"
+            grep -q "^EXPORT PASS" "$PLANNER_OUT/export.log" \
+                || die "planner ONNX export gate A/B not PASS (export.log)"
+            touch "$PLANNER_OUT/export_pass.marker"
+        fi
+    fi
+
 fi
 
 # --------------------------------------------------------------- orin stage --
@@ -156,6 +172,34 @@ if [[ $STAGE == orin || $STAGE == all ]]; then
             --text-engine "$TEXT_ENGINE" \
             --output "$CHAIN_OUT/eng.jsonl"
         "$QD_PY" "$REPO_ROOT/runtime/chain/eval_chain_v3.py" "$CHAIN_OUT/base.jsonl" "$CHAIN_OUT/eng.jsonl" "$CHAIN_OUT/eval_v3_summary.json" "eng"
+    fi
+
+    step 9b "orin: planner engine build + gate (optional fast lane)"
+    if [[ ${QD_FAST_LANE:-0} == 1 ]]; then
+        # shellcheck disable=SC1091
+        source "$REPO_ROOT/configs/planner_engine_build.env"
+        PLANNER_OUT="$QD_RUNTIME_DIR/planner_export"
+        PLAN="$PLANNER_OUT/planner_one_step_dyn_bf16.plan"
+        if [[ ! -f $PLANNER_OUT/planner_gate_bundle_s1141.npz ]]; then
+            "$QD_PY" "$REPO_ROOT/export/planner/dump_gate_bundle.py" \
+                --model-dir "$QD_MODEL_DIR" --planner planner-rl --scene-len 1141 \
+                --out "$PLANNER_OUT/planner_gate_bundle_s1141.npz"
+        fi
+        if [[ ! -f $PLAN ]]; then
+            QD_PLANNER_ONNX="$PLANNER_OUT/planner_dyn.onnx" \
+                bash "$REPO_ROOT/export/planner/build_planner_engine.sh"
+        fi
+        mkdir -p "$QD_RUNTIME_DIR/gates/planner"
+        "$QD_PY" "$REPO_ROOT/export/planner/gate_planner_engine.py" \
+            --plan "$PLAN" --bundle "$PLANNER_OUT/planner_gate_bundle_s1141.npz" \
+            --scene-len 1141 | tee "$QD_RUNTIME_DIR/gates/planner/gate_planner_engine.log"
+        grep -q "GATE PASS" "$QD_RUNTIME_DIR/gates/planner/gate_planner_engine.log" \
+            || die "planner engine gate not PASS (gate_planner_engine.log)"
+    fi
+
+    step 10b "orin: planner fast-lane chain gate (optional; QD_FAST_LANE=1)"
+    if [[ ${QD_FAST_LANE:-0} == 1 ]]; then
+        QD_PLANNER_ENGINE="$PLAN" bash "$REPO_ROOT/runtime/chain/run_planner_fastlane.sh"
     fi
 
 fi
