@@ -14,7 +14,10 @@ does and what good output looks like.
 | 7 | orin | Edge-LLM plugin build ([build_plugin_orin.sh](../export/patches/orin_text_engine/build_plugin_orin.sh)) | `libNvInfer_edgellm_plugin.so` at `$QD_PLUGIN_SO` |
 | 8 | orin | GDN kernel parity gate ([kernels/parity_tco.py](../kernels/parity_tco.py)) | cos >= 0.999 / max rel < 1e-2 vs Triton reference |
 | 9 | orin | engine presence guards | vision `.plan` + text `.plan` exist |
-| 10 | orin | chain gate: torch reference arm vs engine arm -> eval_chain_v3 | `eval_v3_summary.json` verdict PASS |
+| 10 | orin | archived 10-step chain gate (QD_FAST_LANE=0): torch reference arm vs engine arm -> eval_chain_v3 | `eval_v3_summary.json` verdict PASS |
+| 5b | x86 | planner one-step ONNX export + export-time gates (production planner lane, default) | export.log ends with EXPORT PASS |
+| 9b | orin | planner engine build + engine gate (production planner lane) | GATE PASS: cos 0.99993, max 0.88 cm |
+| 10b | orin | planner chain gate (production): all-torch 1-step reference arm vs engine arm | twin-fidelity record + ADE5/FDE5 vs GT in band; PLANNER_ENG 94/94 on-engine (fatal) |
 
 ## Stage notes
 
@@ -67,7 +70,7 @@ process with the vision/planner engines, see [run_pipeline.sh](../run_pipeline.s
 aggregate-blocking verdict (any criterion tripped = FAIL) with the criteria
 in [configs/manifest_f2_05.env](../configs/manifest_f2_05.env).
 
-### Optional fast lane (steps 5b / 9b / 10b, QD_FAST_LANE=1)
+### Production planner lane (steps 5b / 9b / 10b - the default; QD_FAST_LANE=0 runs the archived 10-step gate)
 The one-step planner engine lane: a dynamic-S bf16 trtexec engine replaces
 each planner call with ONE engine invocation per scene instead of the 10-step
 eager sampler rollout. Steps: the x86 ONNX export ([export/planner/export_planner_onnx.py](../export/planner/export_planner_onnx.py),
@@ -78,7 +81,11 @@ the engine are built ([export/planner/build_planner_engine.sh](../export/planner
 S[1139..1748..1750]), the engine gate + latency run ([export/planner/gate_planner_engine.py](../export/planner/gate_planner_engine.py)),
 and the 94-scene chain gate re-runs ([runtime/chain/run_planner_fastlane.sh](../runtime/chain/run_planner_fastlane.sh)):
 fresh all-torch 1-step goldens vs the engine arm (vision + planner engines,
-text stays eager per the co-residency rule). The trajectory gate is
-record-only for this lane; the engine-serving contract (PLANNER_ENG line,
-no disabled/eager-fallback) is fatal. Result history and the measured
-latency class: [docs/results.md](docs/results.md).
+text stays eager per the co-residency rule). The plan-space twin-fidelity
+metric is record-only for this lane (why it can
+co-exist with in-band task metrics: [docs/results.md](docs/results.md)); the
+engine-serving contract (PLANNER_ENG line, no disabled/eager-fallback) is
+fatal. The lane shipped as opt-in (QD_FAST_LANE=1) and was promoted to the
+default production planner on 2026-10-25 after a three-arm ground-truth
+comparison; QD_FAST_LANE=0 keeps the archived 10-step chain gate (1.3076 cm
+PASS) reproducible.

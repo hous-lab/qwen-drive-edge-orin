@@ -5,11 +5,14 @@
 # Engine builds (vision trtexec / text Edge-LLM) are thin build commands
 # documented in configs/*.env and export/patches/orin_text_engine/README.md;
 # their guards below fail with a build pointer when the outputs are missing.
-# Chain gate: the engine arm runs --text-engine only (torch vision eager +
-# eager planner) — the text engine and the vision/planner engines must never
-# share one process (multi-engine co-residency corrupts small tensors; the
-# runner hard-rejects the combination). The vision engine is built + guarded
-# and consumed by its own gate (gate_vision_edgellm.py).
+# Chain gate: production planner is the ONE-STEP TRT bf16 engine
+# (run_planner_fastlane.sh: base all-torch 1-step arm vs engine arm with
+# vision + planner engines; text stays eager because the text engine and the
+# vision/planner engines must never share one process — multi-engine
+# co-residency corrupts small tensors, the runner hard-rejects the
+# combination). The archived 10-step eager-planner chain gate runs with
+# QD_FAST_LANE=0. The vision engine is built + guarded and consumed by its
+# own gate (gate_vision_edgellm.py).
 # Stage-by-stage manual: docs/pipeline_guide.md
 #
 # Usage:
@@ -114,8 +117,8 @@ if [[ $STAGE == x86 || $STAGE == all ]]; then
     else
         die "gate reference npz missing under $LOGS_TEXT -- hf download hous-lab/qwen-drive-edge-orin (ckpts/README.md)"
     fi
-    step 5b "x86: planner one-step ONNX export (optional fast lane)"
-    if [[ ${QD_FAST_LANE:-0} == 1 ]]; then
+    step 5b "x86: planner one-step ONNX export (production planner lane)"
+    if [[ ${QD_FAST_LANE:-1} == 1 ]]; then
         PLANNER_OUT="$QD_RUNTIME_DIR/planner_export"
         mkdir -p "$PLANNER_OUT"
         if [[ -f $PLANNER_OUT/planner_dyn.onnx && -f $PLANNER_OUT/export_pass.marker ]]; then
@@ -152,7 +155,8 @@ if [[ $STAGE == orin || $STAGE == all ]]; then
     [[ -f $TEXT_ENGINE ]] \
         || die "text engine missing at $TEXT_ENGINE — build per export/patches/orin_text_engine/README.md"
 
-    step 10 "orin: chain gate (chain_runner over the scene set -> eval_chain_v3)"
+    step 10 "orin: archived 10-step chain gate (runs with QD_FAST_LANE=0)"
+    if [[ ${QD_FAST_LANE:-1} == 0 ]]; then
     CHAIN_OUT="$QD_RUNTIME_DIR/gates/chain"
     if [[ -f $CHAIN_OUT/eval_v3_summary.json ]]; then
         echo "exists, reusing: $CHAIN_OUT/eval_v3_summary.json"
@@ -173,9 +177,10 @@ if [[ $STAGE == orin || $STAGE == all ]]; then
             --output "$CHAIN_OUT/eng.jsonl"
         "$QD_PY" "$REPO_ROOT/runtime/chain/eval_chain_v3.py" "$CHAIN_OUT/base.jsonl" "$CHAIN_OUT/eng.jsonl" "$CHAIN_OUT/eval_v3_summary.json" "eng"
     fi
+    fi
 
-    step 9b "orin: planner engine build + gate (optional fast lane)"
-    if [[ ${QD_FAST_LANE:-0} == 1 ]]; then
+    step 9b "orin: planner engine build + gate (production planner lane)"
+    if [[ ${QD_FAST_LANE:-1} == 1 ]]; then
         # shellcheck disable=SC1091
         source "$REPO_ROOT/configs/planner_engine_build.env"
         PLANNER_OUT="$QD_RUNTIME_DIR/planner_export"
@@ -197,8 +202,8 @@ if [[ $STAGE == orin || $STAGE == all ]]; then
             || die "planner engine gate not PASS (gate_planner_engine.log)"
     fi
 
-    step 10b "orin: planner fast-lane chain gate (optional; QD_FAST_LANE=1)"
-    if [[ ${QD_FAST_LANE:-0} == 1 ]]; then
+    step 10b "orin: planner chain gate (production)"
+    if [[ ${QD_FAST_LANE:-1} == 1 ]]; then
         QD_PLANNER_ENGINE="$PLAN" bash "$REPO_ROOT/runtime/chain/run_planner_fastlane.sh"
     fi
 
