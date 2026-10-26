@@ -2,7 +2,8 @@
 
 Edge deployment of [**Qwen-Drive-1.0-4B**](https://huggingface.co/Qwen/Qwen-Drive-1.0-4B) on Jetson AGX Orin: **1026 ms** end-to-end latency. Its 1-step trt planner at **35.7 ms** (33× faster than the 10-step rollout) with only **+2.48% ADE5(m)**.
 
-**Status: Stable.** Results were verified on Jetson AGX Orin 64GB, JetPack 6.2.2 / L4T R36.5.0, TensorRT 10.4, TensorRT-Edge-LLM v0.9.1 + the shipped patch bundle, torch 2.8.0 — exact versions in [docs/environment.md](docs/environment.md). Issues are welcome; the deployment is hardware- and version-bound by design, see [docs/results.md](docs/results.md) for limitations.
+**Status: Stable**
+All results are validated on Jetson AGX Orin 64GB under JetPack 6.2.2 / L4T R36.5.0, TensorRT 10.4, TensorRT-Edge-LLM v0.9.1 (with accompanying patches) and PyTorch 2.8.0. See [docs/environment.md](docs/environment.md) for the complete pinned environment specification. Note that the pipeline is tightly coupled to this specific hardware and software stack. Known limitations are summarized in [docs/results.md](docs/results.md). Feel free to open issues.
 
 ## Results
 
