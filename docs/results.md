@@ -31,7 +31,7 @@ The planner serves every scene with ONE engine call (35.7 ms in-chain; 29.7 ms s
 
 ## Baseline and arm design
 
-The baseline on the same device is the same chain with the planner run eagerly through its native 10-step sampler rollout and the text prefill served by the TRT text engine: vision TRT 211.6 ms + text engine 580.5 ms + planner 1162.7 ms + orchestration 216.6 ms = 2191.5 ms end to end. It passes all gates at 1.3076 cm and remains reproducible with `QD_FAST_LANE=0` — this is the configuration to compare against when evaluating future planner variants.
+The baseline on the same device is the same chain with the planner run eagerly through its native 10-step sampler rollout and the text prefill served by the TRT text engine: process 216.6 ms + prefill 812.2 ms + planner 1162.7 ms = 2191.5 ms end to end (archived stage means over the same 94-scene pass; within the prefill, the vision engine reads 211.6 ms and the text engine's trt_text stage 580.5 ms). It passes all gates at 1.3076 cm and remains reproducible with `QD_FAST_LANE=0` — this is the configuration to compare against when evaluating future planner variants.
 
 Accuracy is measured as a three-arm comparison on the 94-scene manifest with ground truth:
 

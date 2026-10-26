@@ -6,7 +6,7 @@ Initial versioned release of the Qwen-Drive-1.0-4B Jetson AGX Orin deployment: a
 
 | Component | Version |
 |---|---|
-| Device | Jetson AGX Orin 64GB (sm_87), JetPack 6 / L4T R36.5.0, MAXN + `jetson_clocks` |
+| Device | Jetson AGX Orin 64GB (sm_87), JetPack 6.2.2 / L4T R36.5.0, MAXN + `jetson_clocks` |
 | TensorRT | 10.4 |
 | TensorRT-Edge-LLM | v0.9.1 + the shipped patch bundle ([export/patches/orin_text_engine/](export/patches/orin_text_engine/)) |
 | torch | 2.8.0 |

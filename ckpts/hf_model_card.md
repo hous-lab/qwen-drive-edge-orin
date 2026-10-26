@@ -42,4 +42,4 @@ Derived exclusively from the upstream checkpoint [Qwen/Qwen-Drive-1.0-4B](https:
 
 ## Platform pairing
 
-Consumed on x86 (torch 2.8.0 / transformers 5.14.1) for validation and on Jetson AGX Orin (sm_87, TRT 10.4, JetPack 6.x) by the text-engine gate. The KV tensors are fp16 engine-contract tensors sized to the f2 manifest (T=1141); other shapes need regeneration, not slicing.
+Consumed on x86 (torch 2.8.0 / transformers 5.14.1) and deployed on Jetson AGX Orin (sm_87, TRT 10.4, JetPack 6.2.2 / L4T R36.5.0). The KV tensors are fp16 engine-contract tensors sized to the f2 manifest (T=1141); other shapes need regeneration, not slicing.

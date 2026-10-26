@@ -1,8 +1,8 @@
 # qwen-drive-edge-orin
 
-Deployment artifacts and evaluation harness for running the [Qwen-Drive-1.0-4B](https://huggingface.co/Qwen/Qwen-Drive-1.0-4B) vision-language-action model on Jetson AGX Orin as a TensorRT pipeline: a TRT fp16 vision engine, bf16 eager text prefill, and a one-step TRT bf16 planner engine that produces each trajectory with a single engine call. The text stack includes a self-developed sm_87 chunk-prefill CUDA kernel for the GDN layers of NVIDIA TensorRT-Edge-LLM; the text prefill runs eagerly in the production chain because the text engine and the planner engine cannot share one process (engine co-residency).
+TensorRT deployment and evaluation stack for the [Qwen-Drive-1.0-4B](https://huggingface.co/Qwen/Qwen-Drive-1.0-4B) VLA model on Jetson AGX Orin at 1026 ms end-to-end, with a one-step TRT planner engine that produces each trajectory in 35.7 ms (33× faster than the 10-step rollout) at only +2.48% ADE5.
 
-**Status: Stable.** Results were verified on Jetson AGX Orin 64GB, JetPack 6 / L4T R36.5.0, TensorRT 10.4, TensorRT-Edge-LLM v0.9.1 + the shipped patch bundle, torch 2.8.0 — exact versions in [docs/environment.md](docs/environment.md). Issues are welcome; the deployment is hardware- and version-bound by design, see [docs/results.md](docs/results.md) for limitations.
+**Status: Stable.** Results were verified on Jetson AGX Orin 64GB, JetPack 6.2.2 / L4T R36.5.0, TensorRT 10.4, TensorRT-Edge-LLM v0.9.1 + the shipped patch bundle, torch 2.8.0 — exact versions in [docs/environment.md](docs/environment.md). Issues are welcome; the deployment is hardware- and version-bound by design, see [docs/results.md](docs/results.md) for limitations.
 
 ## Results
 
@@ -15,7 +15,9 @@ All latencies: Jetson AGX Orin 64GB, MAXN, locked clocks, single stream, batch 1
 | Planner | TRT bf16 one-step engine, dynamic-S | 35.7 ms |
 | End to end | full chain | 1026.0 ms |
 
-Baseline on the same device: the same chain with the planner run eagerly through its native 10-step sampler rollout — vision TRT 211.6 ms + text TRT engine 580.5 ms + planner 1162.7 ms + orchestration 216.6 ms = 2191.5 ms end to end, with all gates PASS at 1.3076 cm; it remains reproducible with `QD_FAST_LANE=0`.
+Text prefill runs eagerly in bf16 because the text and planner TRT engines cannot share one process (engine co-residency — [docs/results.md](docs/results.md), [docs/negative_results.md](docs/negative_results.md)).
+
+Baseline on the same device (`QD_FAST_LANE=0`): the same chain with the planner run eagerly through its native 10-step sampler rollout — process 216.6 + prefill 812.2 + planner 1162.7 = 2191.5 ms end to end (the text engine's trt_text stage reads 580.5 ms of the prefill), with all gates PASS at 1.3076 cm.
 
 The planner serves every scene with one engine call (35.7 ms in-chain; 29.7 ms standalone p50 at S=1141, n=200). Task-level comparison over the 94-scene manifest, ground-truth-anchored:
 
@@ -59,7 +61,7 @@ Production chain gate ([eval_chain_v3](runtime/chain/eval_chain_v3.py), aggregat
 
 ## Hardware and limits
 
-- Verified on Jetson AGX Orin 64GB (sm_87), JetPack 6.x. x86 export host: any CUDA 12.8-capable GPU with >= 16 GB; the vision ONNX export loads the full 4B model.
+- Verified on Jetson AGX Orin 64GB (sm_87), JetPack 6.2.2 / L4T R36.5.0. x86 export host: any CUDA 12.8-capable GPU with >= 16 GB; the vision ONNX export loads the full 4B model.
 - The TRT 10.4 compat delta for the Edge-LLM build is a known release gap, shipped in [docs/environment.md](docs/environment.md).
 
 ## Repository map

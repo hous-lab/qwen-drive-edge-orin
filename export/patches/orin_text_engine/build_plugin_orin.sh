@@ -8,8 +8,8 @@
 # Optional:
 #   QD_BUILD_DIR     build tree name (default build_orin_text)
 #
-# Compat note: a stock v0.9.1 checkout targets TRT >= 10.5 (desktop). JetPack
-# 6.x ships TRT 10.3 (libnvinfer) / 10.4 (python wheel), so the checkout needs
+# Compat note: a stock v0.9.1 checkout targets TRT >= 10.5 (desktop). JetPack 6.2.2
+# ships TRT 10.3 (libnvinfer) / 10.4 (python wheel), so the checkout needs
 # the TRT-10.4 compat deltas before it configures: trtUtils.cpp
 # (IStreamReaderV2 -> IStreamReader), cuda126_cutedsl_compat.h (CUDA 12.6 shim
 # force-included by kernels/plugin targets), and the CuteDsl/XQACubins cmake

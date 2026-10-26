@@ -24,7 +24,7 @@ pip install torch==2.8.0 transformers==5.14.1 onnxruntime==1.23.2 safetensors
 
 | Component | Version | Notes |
 |---|---|---|
-| JetPack / L4T | JP6 / L4T R36.5.0 | A/B comparisons must lock clocks |
+| JetPack / L4T | JetPack 6.2.2 / L4T R36.5.0 | A/B comparisons must lock clocks |
 | CUDA toolkit (nvcc) | 12.6 | parity-harness + Edge-LLM builds |
 | torch | 2.8.0 | runtime gates + parity harness |
 | TensorRT | 10.4 wheel | vision engine (trtexec) + text engine runtime |
