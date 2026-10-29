@@ -23,6 +23,29 @@ Six representative scenes from the 94-scene manifest, spanning the per-scene ADE
 
 *ADE5 is the production 1-step engine arm against the recorded ground truth over the 5 s horizon, same metric definition as the Results table; the trajectory legend names match the arm names used throughout this README and docs/results.md. Predicted once at the clip start — open-loop protocol, no rolling replanning.*
 
+## Rolling replans
+
+The open-loop replays above are the protocol behind every ADE5/FDE5 number in this README: one plan per scene, issued at the clip start and scored over the next 5 s. Deployment is not one-shot: the planner is re-run on fresh perception every control cycle. To show what replanning changes with the deployed artifacts themselves, we replayed six scenes with the certified production chain re-run end to end every 0.5 s over the same 5 s window — 10 replans per scene, each conditioned on fresh camera images, fresh history, and the recorded vehicle state at that instant, against the same manifest ground truth.
+
+<p align="center">
+<table>
+  <tr>
+    <td align="center"><img src="https://github.com/hous-lab/qwen-drive-edge-orin/releases/download/v1.0.1/rolling_chunk0_0003.gif" width="100%"><br><sub>suburban, straight · ADE5 0.57m → executed 0.13m</sub></td>
+    <td align="center"><img src="https://github.com/hous-lab/qwen-drive-edge-orin/releases/download/v1.0.1/rolling_chunk0_0012.gif" width="100%"><br><sub>signalized intersection, straight · ADE5 0.70m → executed 0.17m</sub></td>
+    <td align="center"><img src="https://github.com/hous-lab/qwen-drive-edge-orin/releases/download/v1.0.1/rolling_chunk0_0022.gif" width="100%"><br><sub>urban arterial, straight · ADE5 1.44m → executed 0.16m</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="https://github.com/hous-lab/qwen-drive-edge-orin/releases/download/v1.0.1/rolling_chunk0_0088.gif" width="100%"><br><sub>night intersection, straight · ADE5 1.73m → executed 0.16m</sub></td>
+    <td align="center"><img src="https://github.com/hous-lab/qwen-drive-edge-orin/releases/download/v1.0.1/rolling_chunk0_0033.gif" width="100%"><br><sub>intersection, right turn · ADE5 2.62m → executed 0.24m</sub></td>
+    <td align="center"><img src="https://github.com/hous-lab/qwen-drive-edge-orin/releases/download/v1.0.1/rolling_chunk0_0028.gif" width="100%"><br><sub>highway, lane change missed · ADE5 4.79m → executed 0.12m</sub></td>
+  </tr>
+</table>
+</p>
+
+Left panel: ground truth (dark), the traveled path (thick dark with white halo), the plan fan of all 10 replans (older plans faint slate, latest plan bold orange), and a marker tracking the recorded vehicle position; right panel: the latest plan and ground truth projected on the front camera. The numbers tell the deployment story: per-plan forecast error does not improve with replanning — the model is the same model at every replan, and per-plan ADE5 stays in the open-loop band (scene 0033: 1.03–5.08 m across its 10 replans). What replanning buys is the executed path: stitching the first 0.5 s of each plan — what the vehicle would actually drive — tracks the ground-truth window at 0.12–0.24 m mean, ≤0.50 m max across all six scenes, regardless of the scene's one-shot ADE5 (0.57–4.79 m). The worst one-shot scene (0028, a highway lane change the one-shot plan missed, 4.79 m) tracks at 0.12 m executed. Replanning does not make the model a better forecaster; it makes the executed path accurate.
+
+One honesty note: this is a closed-loop proxy, not a closed-loop evaluation. Every replan is conditioned on the recorded vehicle state at the replan instant (camera images, history, marker anchor), not on the model's own executed path — the vehicle never leaves the recorded log. This isolates the replanning effect against the same ground-truth window the open-loop metric uses, at the cost of not capturing compounding drift. The first replan (k=0) is bitwise-identical to the certified production manifest record for that scene.
+
 ## Results
 
 All latencies: Jetson AGX Orin 64GB, MAXN, locked clocks, single stream, batch 1; means over one 94-scene open-loop pass (pre/post-processing included). The measurement-metadata block and the full evidence chain are in [docs/results.md](docs/results.md).
