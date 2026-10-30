@@ -9,14 +9,14 @@ Six of the 94 manifest scenes: day/night, straight/turn/lane-change. Left: BEV; 
 <p align="center">
 <table>
   <tr>
-    <td align="center"><img src="https://github.com/hous-lab/qwen-drive-edge-orin/releases/download/v1.0.1/replay_chunk0_0003.gif" width="100%"><br><sub>suburban, straight · ADE5 0.57m</sub></td>
-    <td align="center"><img src="https://github.com/hous-lab/qwen-drive-edge-orin/releases/download/v1.0.1/replay_chunk0_0012.gif" width="100%"><br><sub>signalized intersection, straight · ADE5 0.70m</sub></td>
-    <td align="center"><img src="https://github.com/hous-lab/qwen-drive-edge-orin/releases/download/v1.0.1/replay_chunk0_0022.gif" width="100%"><br><sub>urban arterial, straight · ADE5 1.44m</sub></td>
+    <td align="center"><video src="https://github.com/hous-lab/qwen-drive-edge-orin/releases/download/v1.0.1/replay_chunk0_0003.mp4" width="100%" controls muted></video><br><sub>suburban, straight · ADE5 0.57m</sub></td>
+    <td align="center"><video src="https://github.com/hous-lab/qwen-drive-edge-orin/releases/download/v1.0.1/replay_chunk0_0012.mp4" width="100%" controls muted></video><br><sub>signalized intersection, straight · ADE5 0.70m</sub></td>
+    <td align="center"><video src="https://github.com/hous-lab/qwen-drive-edge-orin/releases/download/v1.0.1/replay_chunk0_0022.mp4" width="100%" controls muted></video><br><sub>urban arterial, straight · ADE5 1.44m</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="https://github.com/hous-lab/qwen-drive-edge-orin/releases/download/v1.0.1/replay_chunk0_0088.gif" width="100%"><br><sub>night intersection, straight · ADE5 1.73m</sub></td>
-    <td align="center"><img src="https://github.com/hous-lab/qwen-drive-edge-orin/releases/download/v1.0.1/replay_chunk0_0033.gif" width="100%"><br><sub>intersection, right turn · ADE5 2.62m</sub></td>
-    <td align="center"><img src="https://github.com/hous-lab/qwen-drive-edge-orin/releases/download/v1.0.1/replay_chunk0_0028.gif" width="100%"><br><sub>highway, <font color="red">lane change missed</font> · ADE5 4.79m</sub></td>
+    <td align="center"><video src="https://github.com/hous-lab/qwen-drive-edge-orin/releases/download/v1.0.1/replay_chunk0_0088.mp4" width="100%" controls muted></video><br><sub>night intersection, straight · ADE5 1.73m</sub></td>
+    <td align="center"><video src="https://github.com/hous-lab/qwen-drive-edge-orin/releases/download/v1.0.1/replay_chunk0_0033.mp4" width="100%" controls muted></video><br><sub>intersection, right turn · ADE5 2.62m</sub></td>
+    <td align="center"><video src="https://github.com/hous-lab/qwen-drive-edge-orin/releases/download/v1.0.1/replay_chunk0_0028.mp4" width="100%" controls muted></video><br><sub>highway, <font color="red">lane change missed</font> · ADE5 4.79m</sub></td>
   </tr>
 </table>
 </p>
@@ -30,14 +30,14 @@ Deployment replans every cycle: the certified production chain re-run every 0.5 
 <p align="center">
 <table>
   <tr>
-    <td align="center"><img src="https://github.com/hous-lab/qwen-drive-edge-orin/releases/download/v1.0.1/rolling_chunk0_0003.gif" width="100%"><br><sub>suburban, straight · ADE5 0.57m → executed 0.13m</sub></td>
-    <td align="center"><img src="https://github.com/hous-lab/qwen-drive-edge-orin/releases/download/v1.0.1/rolling_chunk0_0012.gif" width="100%"><br><sub>signalized intersection, straight · ADE5 0.70m → executed 0.17m</sub></td>
-    <td align="center"><img src="https://github.com/hous-lab/qwen-drive-edge-orin/releases/download/v1.0.1/rolling_chunk0_0022.gif" width="100%"><br><sub>urban arterial, straight · ADE5 1.44m → executed 0.16m</sub></td>
+    <td align="center"><video src="https://github.com/hous-lab/qwen-drive-edge-orin/releases/download/v1.0.1/rolling_chunk0_0003.mp4" width="100%" controls muted></video><br><sub>suburban, straight · ADE5 0.57m → executed 0.13m</sub></td>
+    <td align="center"><video src="https://github.com/hous-lab/qwen-drive-edge-orin/releases/download/v1.0.1/rolling_chunk0_0012.mp4" width="100%" controls muted></video><br><sub>signalized intersection, straight · ADE5 0.70m → executed 0.17m</sub></td>
+    <td align="center"><video src="https://github.com/hous-lab/qwen-drive-edge-orin/releases/download/v1.0.1/rolling_chunk0_0022.mp4" width="100%" controls muted></video><br><sub>urban arterial, straight · ADE5 1.44m → executed 0.16m</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="https://github.com/hous-lab/qwen-drive-edge-orin/releases/download/v1.0.1/rolling_chunk0_0088.gif" width="100%"><br><sub>night intersection, straight · ADE5 1.73m → executed 0.16m</sub></td>
-    <td align="center"><img src="https://github.com/hous-lab/qwen-drive-edge-orin/releases/download/v1.0.1/rolling_chunk0_0033.gif" width="100%"><br><sub>intersection, right turn · ADE5 2.62m → executed 0.24m</sub></td>
-    <td align="center"><img src="https://github.com/hous-lab/qwen-drive-edge-orin/releases/download/v1.0.1/rolling_chunk0_0028.gif" width="100%"><br><sub>highway, <font color="red">lane change missed</font> · ADE5 4.79m → executed 0.12m</sub></td>
+    <td align="center"><video src="https://github.com/hous-lab/qwen-drive-edge-orin/releases/download/v1.0.1/rolling_chunk0_0088.mp4" width="100%" controls muted></video><br><sub>night intersection, straight · ADE5 1.73m → executed 0.16m</sub></td>
+    <td align="center"><video src="https://github.com/hous-lab/qwen-drive-edge-orin/releases/download/v1.0.1/rolling_chunk0_0033.mp4" width="100%" controls muted></video><br><sub>intersection, right turn · ADE5 2.62m → executed 0.24m</sub></td>
+    <td align="center"><video src="https://github.com/hous-lab/qwen-drive-edge-orin/releases/download/v1.0.1/rolling_chunk0_0028.mp4" width="100%" controls muted></video><br><sub>highway, <font color="red">lane change missed</font> · ADE5 4.79m → executed 0.12m</sub></td>
   </tr>
 </table>
 </p>
