@@ -6,29 +6,12 @@ Edge deployment of [**Qwen-Drive-1.0-4B**](https://huggingface.co/Qwen/Qwen-Driv
 
 Six of the 94 manifest scenes: day/night, straight/turn/lane-change. Left: BEV; right: front camera. One plan at clip start, scored over the next 5 s — the protocol behind every ADE5/FDE5 below.
 
-**suburban, straight · ADE5 0.57m**
-
-https://github.com/user-attachments/assets/55884d68-08ef-4d12-884f-abe98abb0fed
-
-**signalized intersection, straight · ADE5 0.70m**
-
-https://github.com/user-attachments/assets/eb5c4614-9e98-4123-b5f4-de2caf083c02
-
-**urban arterial, straight · ADE5 1.44m**
-
-https://github.com/user-attachments/assets/a2dd52c7-1348-434c-a590-4a2d3e43866e
-
-**night intersection, straight · ADE5 1.73m**
-
-https://github.com/user-attachments/assets/0673252e-a851-4be7-8197-7c2d80d9805f
-
-**intersection, right turn · ADE5 2.62m**
-
-https://github.com/user-attachments/assets/ba8b972a-3067-4df4-aa85-eedf3cfee178
-
-**highway, lane change missed · ADE5 4.79m**
-
-https://github.com/user-attachments/assets/b948bc35-91da-4b34-ad6e-3afdd9607f26
+| | | |
+|---|---|---|
+| https://github.com/user-attachments/assets/55884d68-08ef-4d12-884f-abe98abb0fed | https://github.com/user-attachments/assets/eb5c4614-9e98-4123-b5f4-de2caf083c02 | https://github.com/user-attachments/assets/a2dd52c7-1348-434c-a590-4a2d3e43866e |
+| <sub>suburban, straight · ADE5 0.57m</sub> | <sub>signalized intersection, straight · ADE5 0.70m</sub> | <sub>urban arterial, straight · ADE5 1.44m</sub> |
+| https://github.com/user-attachments/assets/0673252e-a851-4be7-8197-7c2d80d9805f | https://github.com/user-attachments/assets/ba8b972a-3067-4df4-aa85-eedf3cfee178 | https://github.com/user-attachments/assets/b948bc35-91da-4b34-ad6e-3afdd9607f26 |
+| <sub>night intersection, straight · ADE5 1.73m</sub> | <sub>intersection, right turn · ADE5 2.62m</sub> | <sub>highway, lane change missed · ADE5 4.79m</sub> |
 
 *ADE5 = production 1-step engine vs recorded ground truth over 5 s; legend names match the Results arms ([docs/results.md](docs/results.md)).*
 
@@ -36,30 +19,12 @@ https://github.com/user-attachments/assets/b948bc35-91da-4b34-ad6e-3afdd9607f26
 
 Deployment replans every cycle: the certified production chain re-run every 0.5 s over the same 5 s window — 10 replans per scene, each on fresh images, history, and the recorded vehicle state.
 
-**suburban, straight · ADE5 0.57m → executed 0.13m**
-
-https://github.com/user-attachments/assets/c16b99c3-c796-45a0-b233-d4a28448bc78
-
-**signalized intersection, straight · ADE5 0.70m → executed 0.17m**
-
-https://github.com/user-attachments/assets/929e02b8-55f3-4895-9b99-4b8e2803eec8
-
-**urban arterial, straight · ADE5 1.44m → executed 0.16m**
-
-https://github.com/user-attachments/assets/0c81b9df-6c2b-4277-a5ea-66cff7b59ab5
-
-**night intersection, straight · ADE5 1.73m → executed 0.16m**
-
-https://github.com/user-attachments/assets/b76dde73-4a5a-40ea-b92f-d524c3160df7
-
-**intersection, right turn · ADE5 2.62m → executed 0.24m**
-
-https://github.com/user-attachments/assets/d8d94b5f-dc07-4fac-a0c1-191be59f2547
-
-**highway, lane change missed · ADE5 4.79m → executed 0.12m**
-
-https://github.com/user-attachments/assets/5d2e96b0-3c1e-47cb-84e5-7c8922ef59fe
-
+| | | |
+|---|---|---|
+| https://github.com/user-attachments/assets/c16b99c3-c796-45a0-b233-d4a28448bc78 | https://github.com/user-attachments/assets/929e02b8-55f3-4895-9b99-4b8e2803eec8 | https://github.com/user-attachments/assets/0c81b9df-6c2b-4277-a5ea-66cff7b59ab5 |
+| <sub>suburban, straight · ADE5 0.57m → executed 0.13m</sub> | <sub>signalized intersection, straight · ADE5 0.70m → executed 0.17m</sub> | <sub>urban arterial, straight · ADE5 1.44m → executed 0.16m</sub> |
+| https://github.com/user-attachments/assets/b76dde73-4a5a-40ea-b92f-d524c3160df7 | https://github.com/user-attachments/assets/d8d94b5f-dc07-4fac-a0c1-191be59f2547 | https://github.com/user-attachments/assets/5d2e96b0-3c1e-47cb-84e5-7c8922ef59fe |
+| <sub>night intersection, straight · ADE5 1.73m → executed 0.16m</sub> | <sub>intersection, right turn · ADE5 2.62m → executed 0.24m</sub> | <sub>highway, lane change missed · ADE5 4.79m → executed 0.12m</sub> |
 Per-plan ADE5 does not improve with replanning — same model at every replan (scene 0033: 1.03–5.08 m across its 10 replans). What replanning buys is execution: stitching the first 0.5 s of each plan tracks ground truth at 0.12–0.24 m mean, ≤0.50 m max — the worst one-shot scene (0028, 4.79 m) tracks at 0.12 m. **Replanning does not make the model a better forecaster; it makes the executed path accurate.**
 
 *Closed-loop proxy: replans condition on the recorded vehicle state — no compounding drift captured; the k=0 replan is bitwise-identical to the certified record.*
